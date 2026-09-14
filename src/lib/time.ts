@@ -1,3 +1,5 @@
+import { toDate, toDateMs, toOptionalDateMs, type InstantLike } from "./dates";
+
 const PACIFIC = "America/Los_Angeles";
 
 function tzWallAsUtcMs(instantMs: number, timeZone: string): number {
@@ -38,7 +40,8 @@ export function pacificWallToUtc(date: string, time: string): Date {
   return new Date(utc);
 }
 
-export function utcToPacificParts(ms: number): { date: string; time: string } {
+export function utcToPacificParts(value: InstantLike): { date: string; time: string } {
+  const ms = toDateMs(value);
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: PACIFIC,
     year: "numeric",
@@ -57,8 +60,8 @@ export function utcToPacificParts(ms: number): { date: string; time: string } {
   };
 }
 
-export function formatPacific(ms: number, withTime = true): string {
-  const date = new Date(ms);
+export function formatPacific(value: InstantLike, withTime = true): string {
+  const date = toDate(value);
   const datePart = new Intl.DateTimeFormat("en-US", {
     timeZone: PACIFIC,
     weekday: "long",
@@ -75,24 +78,26 @@ export function formatPacific(ms: number, withTime = true): string {
   return `${datePart} at ${timePart} PT`;
 }
 
-export function formatPacificRange(startsAt: number, endsAt?: number | null): string {
-  const start = formatPacific(startsAt);
-  if (!endsAt) return start;
-  const startParts = utcToPacificParts(startsAt);
-  const endParts = utcToPacificParts(endsAt);
+export function formatPacificRange(startsAt: InstantLike, endsAt?: InstantLike | null): string {
+  const startMs = toDateMs(startsAt);
+  const endMs = toOptionalDateMs(endsAt);
+  const start = formatPacific(startMs);
+  if (endMs == null) return start;
+  const startParts = utcToPacificParts(startMs);
+  const endParts = utcToPacificParts(endMs);
   const endTime = new Intl.DateTimeFormat("en-US", {
     timeZone: PACIFIC,
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(endsAt));
+  }).format(new Date(endMs));
   if (startParts.date === endParts.date) {
-    return `${formatPacific(startsAt).replace(/ at .+$/, "")} from ${
+    return `${formatPacific(startMs).replace(/ at .+$/, "")} from ${
       new Intl.DateTimeFormat("en-US", {
         timeZone: PACIFIC,
         hour: "numeric",
         minute: "2-digit",
-      }).format(new Date(startsAt))
+      }).format(new Date(startMs))
     } to ${endTime} PT`;
   }
-  return `${start} – ${formatPacific(endsAt)}`;
+  return `${start} – ${formatPacific(endMs)}`;
 }

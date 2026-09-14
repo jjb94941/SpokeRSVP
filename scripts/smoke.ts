@@ -5,7 +5,8 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
-import { pacificWallToUtc, utcToPacificParts } from "../src/lib/time";
+import { pacificWallToUtc, utcToPacificParts, formatPacificRange } from "../src/lib/time";
+import { isSecureSessionCookie, toDateMs } from "../src/lib/dates";
 import { newId, newShareToken } from "../src/lib/ids";
 import { closeDb, getDb } from "../src/lib/db";
 import { events, hosts, rsvps } from "../src/lib/db/schema";
@@ -13,11 +14,26 @@ import { autoPromoteWaitlist, getEventCounts, submitRsvp } from "../src/lib/rsvp
 
 config();
 
-function roundtripPacific() {
+function timestampCoercion() {
   const utc = pacificWallToUtc("2026-09-16", "10:00");
-  const parts = utcToPacificParts(utc.getTime());
-  assert.equal(parts.date, "2026-09-16");
-  assert.equal(parts.time, "10:00");
+  const ms = utc.getTime();
+  const event = { startsAt: ms, endsAt: ms + 2 * 60 * 60 * 1000 };
+  const label = formatPacificRange(event.startsAt, event.endsAt);
+  assert.match(label, /September 16, 2026/);
+  assert.equal(formatPacificRange(utc, new Date(event.endsAt)), label);
+  assert.equal(utcToPacificParts(ms).time, "10:00");
+  const rows = [
+    { status: "published", startsAt: utc },
+    { status: "cancelled", startsAt: ms },
+  ];
+  rows.sort((a, b) => {
+    if (a.status !== b.status) return a.status === "cancelled" ? 1 : -1;
+    return toDateMs(a.startsAt) - toDateMs(b.startsAt);
+  });
+  assert.equal(rows[0]?.status, "published");
+  assert.equal(isSecureSessionCookie({ NODE_ENV: "production" }), true);
+  assert.equal(isSecureSessionCookie({ NODE_ENV: "development" }), false);
+  assert.equal(isSecureSessionCookie({ NODE_ENV: "development", VERCEL: "1" }), true);
 }
 
 async function rsvpFlow() {
@@ -61,6 +77,8 @@ async function rsvpFlow() {
     .run();
 
   const event = (await db.select().from(events).where(eq(events.id, eventId)).get())!;
+  const formatted = formatPacificRange(toDateMs(event.startsAt), event.endsAt);
+  assert.match(formatted, /September 16, 2026/);
   const a = await submitRsvp(event, {
     guestName: "Ada",
     email: "ada@example.com",
@@ -120,7 +138,7 @@ async function rsvpFlow() {
 }
 
 async function main() {
-  roundtripPacific();
+  timestampCoercion();
   await rsvpFlow();
   console.log("smoke ok");
 }

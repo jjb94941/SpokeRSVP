@@ -50,7 +50,7 @@ export default async function HostEventPage({
         </p>
       ) : null}
       <h1 className="font-display text-4xl">{event.title}</h1>
-      <p className="mt-2 text-xl">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
+      <p className="mt-2 text-xl">{formatPacificRange(event.startsAt, event.endsAt)}</p>
       <p className="mt-1 text-lg">{event.locationName}</p>
       {event.streetAddress ? (
         <p className="mt-1 text-base text-ink/80">Private street address: {event.streetAddress}</p>

@@ -11,6 +11,7 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:reset": "tsx scripts/seed.ts --reset",
     "test:smoke": "tsx scripts/smoke.ts",
+    "test:unit": "tsx --test src/lib/dates.test.ts",
     "reminders": "tsx scripts/reminders.ts"
   },
   "engines": {

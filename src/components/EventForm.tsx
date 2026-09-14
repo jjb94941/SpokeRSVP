@@ -11,8 +11,8 @@ export function EventForm({
   action: (formData: FormData) => void | Promise<void>;
   submitLabel: string;
 }) {
-  const start = event ? utcToPacificParts(event.startsAt.getTime()) : { date: "", time: "10:00" };
-  const end = event?.endsAt ? utcToPacificParts(event.endsAt.getTime()) : { date: "", time: "" };
+  const start = event ? utcToPacificParts(event.startsAt) : { date: "", time: "10:00" };
+  const end = event?.endsAt ? utcToPacificParts(event.endsAt) : { date: "", time: "" };
 
   return (
     <form action={action} className="card max-w-2xl">

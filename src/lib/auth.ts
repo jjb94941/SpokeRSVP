@@ -4,13 +4,27 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { hosts, magicLinks, sessions, type Host } from "./db/schema";
+import { isSecureSessionCookie, toDateMs, toOptionalDate } from "./dates";
 import { newId, newSecretToken, sha256Hex } from "./ids";
 import { normalizeEmail } from "./format";
 
 export const SESSION_COOKIE = "spoke_session";
 export const GUEST_COOKIE_PREFIX = "spoke_guest_";
 const SESSION_DAYS = 30;
+const SESSION_MAX_AGE = SESSION_DAYS * 24 * 60 * 60;
 const MAGIC_MINUTES = 30;
+
+function sessionCookieOptions(overrides: { expires?: Date; maxAge?: number } = {}) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    // Vercel is HTTPS; secure cookies must still be set in the same Server Action
+    // that redirects (Next.js 15 cookies().set before redirect()).
+    secure: isSecureSessionCookie(),
+    path: "/",
+    ...overrides,
+  };
+}
 
 export async function getCurrentHost(): Promise<Host | null> {
   const jar = await cookies();
@@ -18,7 +32,7 @@ export async function getCurrentHost(): Promise<Host | null> {
   if (!sessionId) return null;
   const db = await getDb();
   const session = await db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
-  if (!session || session.expiresAt.getTime() < Date.now()) {
+  if (!session || toDateMs(session.expiresAt) < Date.now()) {
     if (session) await db.delete(sessions).where(eq(sessions.id, sessionId)).run();
     return null;
   }
@@ -37,13 +51,14 @@ export async function createSession(hostId: string) {
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
   await db.insert(sessions).values({ id, hostId, expiresAt }).run();
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, id, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    expires: expiresAt,
-  });
+  jar.set(
+    SESSION_COOKIE,
+    id,
+    sessionCookieOptions({
+      expires: expiresAt,
+      maxAge: SESSION_MAX_AGE,
+    }),
+  );
 }
 
 export async function destroySession() {
@@ -53,7 +68,7 @@ export async function destroySession() {
     const db = await getDb();
     await db.delete(sessions).where(eq(sessions.id, sessionId)).run();
   }
-  jar.set(SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+  jar.set(SESSION_COOKIE, "", sessionCookieOptions({ maxAge: 0 }));
 }
 
 export function verifyHostPassword(host: Host, password: string): boolean {
@@ -90,20 +105,18 @@ export async function consumeMagicLink(token: string): Promise<string | null> {
     .from(magicLinks)
     .where(eq(magicLinks.tokenHash, sha256Hex(token)))
     .get();
-  if (!row || row.usedAt || row.expiresAt.getTime() < Date.now()) return null;
+  if (!row || toOptionalDate(row.usedAt) || toDateMs(row.expiresAt) < Date.now()) return null;
   await db.update(magicLinks).set({ usedAt: new Date() }).where(eq(magicLinks.id, row.id)).run();
   return row.email;
 }
 
 export async function setGuestCookie(eventId: string, manageToken: string) {
   const jar = await cookies();
-  jar.set(`${GUEST_COOKIE_PREFIX}${eventId}`, manageToken, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 180,
-  });
+  jar.set(
+    `${GUEST_COOKIE_PREFIX}${eventId}`,
+    manageToken,
+    sessionCookieOptions({ maxAge: 60 * 60 * 24 * 180 }),
+  );
 }
 
 export async function getGuestManageToken(eventId: string): Promise<string | undefined> {

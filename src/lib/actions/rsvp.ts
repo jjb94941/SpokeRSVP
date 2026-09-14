@@ -50,7 +50,7 @@ export async function guestRsvp(formData: FormData) {
       text: rsvpConfirmationText({
         guestName: rsvp.guestName,
         eventTitle: event.title,
-        when: formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime()),
+        when: formatPacificRange(event.startsAt, event.endsAt),
         where: event.locationName,
         status: rsvp.status,
         manageUrl,

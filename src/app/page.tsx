@@ -3,6 +3,7 @@ import { desc } from "drizzle-orm";
 import { SiteFooter, SiteHeader } from "@/components/Chrome";
 import { getDb } from "@/lib/db";
 import { events } from "@/lib/db/schema";
+import { toDateMs } from "@/lib/dates";
 import { getEventCounts } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
 
@@ -10,7 +11,7 @@ export default async function HomePage() {
   const db = await getDb();
   const upcoming = (await db.select().from(events).orderBy(desc(events.startsAt)).all())
     .filter((event) => event.status === "published")
-    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+    .sort((a, b) => toDateMs(a.startsAt) - toDateMs(b.startsAt));
   const listed = await Promise.all(
     upcoming.map(async (event) => ({ event, counts: await getEventCounts(event) })),
   );
@@ -50,7 +51,7 @@ export default async function HomePage() {
             <ul className="mt-6 grid gap-5">
               {listed.map(({ event, counts }) => (
                   <li key={event.id} className="card">
-                    <p className="text-base font-semibold text-teal">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
+                    <p className="text-base font-semibold text-teal">{formatPacificRange(event.startsAt, event.endsAt)}</p>
                     <h3 className="font-display mt-1 text-3xl">{event.title}</h3>
                     <p className="mt-2 text-lg">{event.locationName}</p>
                     <p className="mt-3 text-lg">
