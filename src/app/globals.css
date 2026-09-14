@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-terracotta: #c46b4a;
+  --color-terracotta-dark: #a3553a;
+  --color-cream: #fbf6f0;
+  --color-teal: #4a7c74;
+  --color-teal-dark: #3a635c;
+  --color-ink: #3d2f28;
+  --color-sand: #f3e8d9;
+  --color-sand-deep: #e6d3be;
+  --font-sans: var(--font-atkinson), "Atkinson Hyperlegible", "Segoe UI", sans-serif;
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+}
+
+html,
+body {
+  background: #fbf6f0;
+  color: #3d2f28;
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+body {
+  font-family: var(--font-sans);
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+:focus-visible {
+  outline: 3px solid #4a7c74;
+  outline-offset: 3px;
+}
+
+.btn-primary {
+  display: inline-flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: #c46b4a;
+  padding: 0 1.5rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #fbf6f0;
+  box-shadow: 0 1px 2px rgb(61 47 40 / 0.12);
+}
+
+.btn-primary:hover {
+  background: #a3553a;
+}
+
+.btn-teal {
+  display: inline-flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: #4a7c74;
+  padding: 0 1.5rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #fbf6f0;
+}
+
+.btn-teal:hover {
+  background: #3a635c;
+}
+
+.card {
+  border-radius: 1.25rem;
+  background: #f7efe4;
+  padding: 1.5rem;
+  box-shadow: 0 1px 2px rgb(61 47 40 / 0.06);
+  border: 1px solid #e6d3be;
+}
+
+a {
+  color: inherit;
+}
