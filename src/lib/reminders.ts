@@ -28,7 +28,7 @@ export async function sendDueReminders(now = Date.now(), appUrl = process.env.AP
       .all();
     for (const guest of going) {
       const manageUrl = `${appUrl.replace(/\/$/, "")}/e/${event.shareToken}?m=${guest.manageToken}`;
-      const when = formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime());
+      const when = formatPacificRange(event.startsAt, event.endsAt);
       if (guest.email) {
         await sendEmail({
           to: guest.email,

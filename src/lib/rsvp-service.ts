@@ -105,7 +105,7 @@ export async function upsertCarpool(
 
 function notifyPromoted(event: EventRow, guest: RsvpRow, appUrl?: string) {
   const manageUrl = appUrl ? `${appUrl}/e/${event.shareToken}?m=${guest.manageToken}` : "";
-  const when = formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime());
+  const when = formatPacificRange(event.startsAt, event.endsAt);
   if (guest.email) {
     void sendEmail({
       to: guest.email,

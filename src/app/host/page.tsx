@@ -4,6 +4,7 @@ import { Flash } from "@/components/Ui";
 import { requireHost } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events } from "@/lib/db/schema";
+import { toDateMs } from "@/lib/dates";
 import { getEventCounts } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
 
@@ -23,7 +24,7 @@ export default async function HostHome({
     .all())
     .sort((a, b) => {
       if (a.status !== b.status) return a.status === "cancelled" ? 1 : -1;
-      return a.startsAt.getTime() - b.startsAt.getTime();
+      return toDateMs(a.startsAt) - toDateMs(b.startsAt);
     });
   const listed = await Promise.all(
     rows.map(async (event) => ({ event, counts: await getEventCounts(event) })),
@@ -51,7 +52,7 @@ export default async function HostHome({
                   <p className="mb-2 font-bold text-terracotta">Cancelled</p>
                 ) : null}
                 <h2 className="font-display text-3xl">{event.title}</h2>
-                <p className="mt-1 text-lg">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
+                <p className="mt-1 text-lg">{formatPacificRange(event.startsAt, event.endsAt)}</p>
                 <p className="mt-1 text-lg">{event.locationName}</p>
                 <p className="mt-3 text-lg">
                   {counts.going} going · {counts.waitlist} waitlist · {counts.notGoing} not going · capacity{" "}

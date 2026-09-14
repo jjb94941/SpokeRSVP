@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { getCurrentHost } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events } from "@/lib/db/schema";
+import { toDate } from "@/lib/dates";
 import { csvEscape, formatPhoneDisplay } from "@/lib/format";
 import { listRsvps } from "@/lib/rsvp-service";
 
@@ -35,7 +36,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         csvEscape(carpool?.role === "offer" ? "offer" : carpool?.role === "need" ? "need" : ""),
         csvEscape(carpool?.seats),
         csvEscape(carpool?.note),
-        csvEscape(rsvp.updatedAt.toISOString()),
+        csvEscape(toDate(rsvp.updatedAt).toISOString()),
       ].join(","),
     ),
   ];

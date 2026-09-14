@@ -58,7 +58,7 @@ export default async function PublicRsvpPage({
         ) : null}
         <p className="text-lg font-semibold text-teal">Mill Valley Village</p>
         <h1 className="font-display mt-1 text-4xl sm:text-5xl">{event.title}</h1>
-        <p className="mt-3 text-xl">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
+        <p className="mt-3 text-xl">{formatPacificRange(event.startsAt, event.endsAt)}</p>
         <p className="mt-2 text-xl">{event.locationName}</p>
         {host && event.streetAddress ? (
           <p className="mt-1 text-base text-ink/80">Street address (host only): {event.streetAddress}</p>
