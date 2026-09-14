@@ -1,3 +1,4 @@
+import { config } from "dotenv";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +11,8 @@ import { closeDb, getDb } from "../src/lib/db";
 import { events, hosts, rsvps } from "../src/lib/db/schema";
 import { autoPromoteWaitlist, getEventCounts, submitRsvp } from "../src/lib/rsvp-service";
 
+config();
+
 function roundtripPacific() {
   const utc = pacificWallToUtc("2026-09-16", "10:00");
   const parts = utcToPacificParts(utc.getTime());
@@ -19,12 +22,14 @@ function roundtripPacific() {
 
 async function rsvpFlow() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spoke-smoke-"));
-  process.env.DATABASE_PATH = path.join(dir, "spoke.db");
+  process.env.DATABASE_URL = `file:${path.join(dir, "spoke.db")}`;
+  delete process.env.DATABASE_AUTH_TOKEN;
   closeDb();
-  const db = getDb();
+  const db = await getDb();
   const now = new Date();
   const hostId = newId();
-  db.insert(hosts)
+  await db
+    .insert(hosts)
     .values({
       id: hostId,
       email: "chair@millvalleyvillage.org",
@@ -35,7 +40,8 @@ async function rsvpFlow() {
     .run();
   const eventId = newId();
   const shareToken = newShareToken();
-  db.insert(events)
+  await db
+    .insert(events)
     .values({
       id: eventId,
       hostId,
@@ -54,21 +60,21 @@ async function rsvpFlow() {
     })
     .run();
 
-  const event = db.select().from(events).where(eq(events.id, eventId)).get()!;
-  const a = submitRsvp(event, {
+  const event = (await db.select().from(events).where(eq(events.id, eventId)).get())!;
+  const a = await submitRsvp(event, {
     guestName: "Ada",
     email: "ada@example.com",
     desiredStatus: "going",
     carpoolRole: "offer",
     seats: 2,
   });
-  const b = submitRsvp(event, {
+  const b = await submitRsvp(event, {
     guestName: "Bea",
     phone: "415-555-0102",
     desiredStatus: "going",
     carpoolRole: "need",
   });
-  const c = submitRsvp(event, {
+  const c = await submitRsvp(event, {
     guestName: "Cara",
     email: "cara@example.com",
     desiredStatus: "going",
@@ -76,33 +82,33 @@ async function rsvpFlow() {
   assert.equal(a.rsvp.status, "going");
   assert.equal(b.rsvp.status, "going");
   assert.equal(c.rsvp.status, "waitlist");
-  let counts = getEventCounts(event);
+  let counts = await getEventCounts(event);
   assert.equal(counts.going, 2);
   assert.equal(counts.waitlist, 1);
 
-  submitRsvp(event, {
+  await submitRsvp(event, {
     guestName: "Ada",
     email: "ada@example.com",
     desiredStatus: "not_going",
     manageToken: a.rsvp.manageToken,
   });
-  counts = getEventCounts(event);
+  counts = await getEventCounts(event);
   assert.equal(counts.going, 2, "waitlist guest should auto-promote when a Going guest leaves");
   assert.equal(counts.waitlist, 0);
-  const cara = db.select().from(rsvps).where(eq(rsvps.id, c.rsvp.id)).get();
+  const cara = await db.select().from(rsvps).where(eq(rsvps.id, c.rsvp.id)).get();
   assert.equal(cara?.status, "going");
 
-  const extra = submitRsvp(event, {
+  const extra = await submitRsvp(event, {
     guestName: "Dee",
     email: "dee@example.com",
     desiredStatus: "going",
   });
   assert.equal(extra.rsvp.status, "waitlist");
-  autoPromoteWaitlist(event);
-  assert.equal(getEventCounts(event).waitlist, 1, "auto-promote should not overfill");
+  await autoPromoteWaitlist(event);
+  assert.equal((await getEventCounts(event)).waitlist, 1, "auto-promote should not overfill");
 
   // Duplicate email updates the same RSVP
-  const again = submitRsvp(event, {
+  const again = await submitRsvp(event, {
     guestName: "Deirdre",
     email: "dee@example.com",
     desiredStatus: "not_going",

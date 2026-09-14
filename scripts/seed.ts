@@ -1,11 +1,13 @@
+import { config } from "dotenv";
 import fs from "node:fs";
-import path from "node:path";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
-import { closeDb, getDb } from "../src/lib/db";
+import { closeDb, fileUrlToPath, getDb, resolveDatabaseUrl, wipeData } from "../src/lib/db";
 import { carpools, events, hosts, rsvps } from "../src/lib/db/schema";
 import { newId, newSecretToken, newShareToken } from "../src/lib/ids";
 import { pacificWallToUtc } from "../src/lib/time";
+
+config();
 
 const DEMO_EMAIL = "chair@millvalleyvillage.org";
 const DEMO_PASSWORD = "millvalley";
@@ -14,35 +16,46 @@ function at(date: string, time: string) {
   return pacificWallToUtc(date, time);
 }
 
+async function resetLocalFile(url: string) {
+  closeDb();
+  const resolved = fileUrlToPath(url);
+  if (!resolved) return false;
+  for (const suffix of ["", "-wal", "-shm"]) {
+    const file = resolved + suffix;
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  }
+  return true;
+}
+
 async function main() {
   const reset = process.argv.includes("--reset");
-  const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "spoke.db");
-  const resolved = path.isAbsolute(dbPath) ? dbPath : path.join(process.cwd(), dbPath);
+  const url = resolveDatabaseUrl();
 
-  if (reset && fs.existsSync(resolved)) {
-    closeDb();
-    for (const suffix of ["", "-wal", "-shm"]) {
-      const file = resolved + suffix;
-      if (fs.existsSync(file)) fs.unlinkSync(file);
+  if (reset) {
+    const deletedFile = await resetLocalFile(url);
+    if (!deletedFile) {
+      await wipeData();
     }
   }
 
-  const db = getDb();
-  const existing = db.select().from(hosts).where(eq(hosts.email, DEMO_EMAIL)).get();
+  const db = await getDb();
+  const existing = await db.select().from(hosts).where(eq(hosts.email, DEMO_EMAIL)).get();
   if (existing && !reset) {
     console.log("Demo data already exists. Demo host:");
     console.log(`  ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
     console.log("Re-run with npm run db:reset to rebuild the sample events.");
+    console.log("Change this password before any public/production deploy.");
     return;
   }
 
   if (existing && reset) {
-    db.delete(hosts).where(eq(hosts.id, existing.id)).run();
+    await db.delete(hosts).where(eq(hosts.id, existing.id)).run();
   }
 
   const now = new Date();
   const hostId = newId();
-  db.insert(hosts)
+  await db
+    .insert(hosts)
     .values({
       id: hostId,
       email: DEMO_EMAIL,
@@ -56,7 +69,8 @@ async function main() {
   const coffeeId = newId();
   const bookId = newId();
 
-  db.insert(events)
+  await db
+    .insert(events)
     .values([
       {
         id: hikeId,
@@ -112,14 +126,15 @@ async function main() {
     ])
     .run();
 
-  function addRsvp(
+  async function addRsvp(
     eventId: string,
     guestName: string,
     status: "going" | "waitlist" | "not_going",
     extra?: { email?: string; phone?: string; waitlistOrder?: number },
   ) {
     const id = newId();
-    db.insert(rsvps)
+    await db
+      .insert(rsvps)
       .values({
         id,
         eventId,
@@ -136,25 +151,26 @@ async function main() {
     return id;
   }
 
-  const alice = addRsvp(hikeId, "Alice Nguyen", "going", {
+  const alice = await addRsvp(hikeId, "Alice Nguyen", "going", {
     email: "alice@example.com",
     phone: "4155550101",
   });
-  addRsvp(hikeId, "Bob Martinez", "going", { phone: "4155550102" });
-  const cara = addRsvp(hikeId, "Cara Feldman", "going", { email: "cara@example.com" });
-  addRsvp(hikeId, "David Chen", "going", { email: "david@example.com" });
-  addRsvp(hikeId, "Elena Rossi", "waitlist", { email: "elena@example.com", waitlistOrder: 1 });
-  addRsvp(hikeId, "Frank Patel", "not_going", { phone: "4155550199" });
+  await addRsvp(hikeId, "Bob Martinez", "going", { phone: "4155550102" });
+  const cara = await addRsvp(hikeId, "Cara Feldman", "going", { email: "cara@example.com" });
+  await addRsvp(hikeId, "David Chen", "going", { email: "david@example.com" });
+  await addRsvp(hikeId, "Elena Rossi", "waitlist", { email: "elena@example.com", waitlistOrder: 1 });
+  await addRsvp(hikeId, "Frank Patel", "not_going", { phone: "4155550199" });
 
-  db.insert(carpools)
+  await db
+    .insert(carpools)
     .values([
       { id: newId(), rsvpId: alice, role: "offer", seats: 3, note: "Leaving from downtown Mill Valley at 9:30." },
       { id: newId(), rsvpId: cara, role: "need", seats: null, note: "Near Tamalpais High if anyone has a seat." },
     ])
     .run();
 
-  addRsvp(coffeeId, "Grace Kim", "going", { email: "grace@example.com" });
-  addRsvp(coffeeId, "Helen Brooks", "going", { phone: "4155550177" });
+  await addRsvp(coffeeId, "Grace Kim", "going", { email: "grace@example.com" });
+  await addRsvp(coffeeId, "Helen Brooks", "going", { phone: "4155550177" });
 
   for (const name of [
     "Irene Walsh",
@@ -166,18 +182,19 @@ async function main() {
     "Oscar Diaz",
     "Priya Shah",
   ]) {
-    addRsvp(bookId, name, "going", { email: `${name.split(" ")[0].toLowerCase()}@example.com` });
+    await addRsvp(bookId, name, "going", { email: `${name.split(" ")[0].toLowerCase()}@example.com` });
   }
-  addRsvp(bookId, "Quinn Ellis", "waitlist", { email: "quinn@example.com", waitlistOrder: 1 });
-  addRsvp(bookId, "Rita Hoffman", "waitlist", { email: "rita@example.com", waitlistOrder: 2 });
+  await addRsvp(bookId, "Quinn Ellis", "waitlist", { email: "quinn@example.com", waitlistOrder: 1 });
+  await addRsvp(bookId, "Rita Hoffman", "waitlist", { email: "rita@example.com", waitlistOrder: 2 });
 
-  const hike = db.select().from(events).where(eq(events.id, hikeId)).get();
-  const coffee = db.select().from(events).where(eq(events.id, coffeeId)).get();
-  const book = db.select().from(events).where(eq(events.id, bookId)).get();
+  const hike = await db.select().from(events).where(eq(events.id, hikeId)).get();
+  const coffee = await db.select().from(events).where(eq(events.id, coffeeId)).get();
+  const book = await db.select().from(events).where(eq(events.id, bookId)).get();
 
   console.log("Seeded Mill Valley Village demo data.");
+  console.log(`Database: ${url.startsWith("file:") ? url : "Turso / remote libSQL"}`);
   console.log("");
-  console.log("Demo host (local / development only):");
+  console.log("Demo host (local / development only — change this password before production):");
   console.log(`  Email:    ${DEMO_EMAIL}`);
   console.log(`  Password: ${DEMO_PASSWORD}`);
   console.log("");
@@ -187,7 +204,11 @@ async function main() {
   console.log(`  Book club:/e/${book?.shareToken}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  })
+  .finally(() => {
+    closeDb();
+  });

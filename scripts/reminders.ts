@@ -1,4 +1,8 @@
+import { config } from "dotenv";
 import { sendDueReminders } from "../src/lib/reminders";
+import { closeDb } from "../src/lib/db";
+
+config();
 
 sendDueReminders()
   .then((result) => {
@@ -8,4 +12,7 @@ sendDueReminders()
   .catch((error) => {
     console.error(error);
     process.exit(1);
+  })
+  .finally(() => {
+    closeDb();
   });

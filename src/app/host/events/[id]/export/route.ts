@@ -14,14 +14,15 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return NextResponse.redirect(new URL("/login", _request.url));
   }
   const { id } = await context.params;
-  const event = getDb()
+  const db = await getDb();
+  const event = await db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.hostId, host.id)))
     .get();
   if (!event) return new NextResponse("Not found", { status: 404 });
 
-  const rows = listRsvps(event.id);
+  const rows = await listRsvps(event.id);
   const header = ["Name", "Email", "Phone", "Status", "Carpool", "Seats", "Ride note", "RSVP updated"];
   const lines = [
     header.join(","),

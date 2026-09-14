@@ -10,9 +10,9 @@ import { formatPacificRange } from "./time";
  * SMS is TODO.
  */
 export async function sendDueReminders(now = Date.now(), appUrl = process.env.APP_URL || "http://localhost:3000") {
-  const db = getDb();
+  const db = await getDb();
   const windowEnd = now + 48 * 60 * 60 * 1000;
-  const upcoming = db
+  const upcoming = await db
     .select()
     .from(events)
     .where(and(eq(events.status, "published"), gte(events.startsAt, new Date(now)), lte(events.startsAt, new Date(windowEnd))))
@@ -21,7 +21,7 @@ export async function sendDueReminders(now = Date.now(), appUrl = process.env.AP
   let emailed = 0;
   let smsTodo = 0;
   for (const event of upcoming) {
-    const going = db
+    const going = await db
       .select()
       .from(rsvps)
       .where(and(eq(rsvps.eventId, event.id), eq(rsvps.status, "going")))

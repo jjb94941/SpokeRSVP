@@ -18,7 +18,8 @@ export default async function EditEventPage({
   const host = await requireHost();
   const { id } = await params;
   const q = await searchParams;
-  const event = getDb()
+  const db = await getDb();
+  const event = await db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.hostId, host.id)))

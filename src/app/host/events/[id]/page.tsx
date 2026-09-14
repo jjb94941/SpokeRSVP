@@ -8,7 +8,7 @@ import { appUrl, requireHost } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events } from "@/lib/db/schema";
 import { firstName, formatPhoneDisplay } from "@/lib/format";
-import { getEventCounts, listRsvps } from "@/lib/rsvp-service";
+import { getEventCounts, listRsvps, type RsvpListRow } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
 
 export default async function HostEventPage({
@@ -21,14 +21,15 @@ export default async function HostEventPage({
   const host = await requireHost();
   const { id } = await params;
   const q = await searchParams;
-  const event = getDb()
+  const db = await getDb();
+  const event = await db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.hostId, host.id)))
     .get();
   if (!event) notFound();
-  const counts = getEventCounts(event);
-  const rows = listRsvps(event.id);
+  const counts = await getEventCounts(event);
+  const rows = await listRsvps(event.id);
   const going = rows.filter((row) => row.rsvp.status === "going");
   const waitlist = rows.filter((row) => row.rsvp.status === "waitlist");
   const notGoing = rows.filter((row) => row.rsvp.status === "not_going");
@@ -180,7 +181,7 @@ function GuestTable({
   showCarpool,
   empty,
 }: {
-  rows: ReturnType<typeof listRsvps>;
+  rows: RsvpListRow[];
   showCarpool?: boolean;
   empty: string;
 }) {

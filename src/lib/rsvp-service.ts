@@ -1,6 +1,6 @@
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { getDb } from "./db";
-import { carpools, events, rsvps, type CarpoolRole, type EventRow, type RsvpRow } from "./db/schema";
+import { carpools, events, rsvps, type CarpoolRole, type CarpoolRow, type EventRow, type RsvpRow } from "./db/schema";
 import { newId, newSecretToken } from "./ids";
 import { normalizeEmail, normalizePhone } from "./format";
 import { sendEmail, sendSmsTodo, waitlistPromotedText } from "./notify";
@@ -24,26 +24,28 @@ export type EventCounts = {
   spotsLeft: number;
 };
 
-export function getEventCounts(event: EventRow): EventCounts {
-  const db = getDb();
+export type RsvpListRow = { rsvp: RsvpRow; carpool: CarpoolRow | null };
+
+export async function getEventCounts(event: EventRow): Promise<EventCounts> {
+  const db = await getDb();
   const going =
-    db
+    (await db
       .select({ c: count() })
       .from(rsvps)
       .where(and(eq(rsvps.eventId, event.id), eq(rsvps.status, "going")))
-      .get()?.c ?? 0;
+      .get())?.c ?? 0;
   const waitlist =
-    db
+    (await db
       .select({ c: count() })
       .from(rsvps)
       .where(and(eq(rsvps.eventId, event.id), eq(rsvps.status, "waitlist")))
-      .get()?.c ?? 0;
+      .get())?.c ?? 0;
   const notGoing =
-    db
+    (await db
       .select({ c: count() })
       .from(rsvps)
       .where(and(eq(rsvps.eventId, event.id), eq(rsvps.status, "not_going")))
-      .get()?.c ?? 0;
+      .get())?.c ?? 0;
   return {
     going,
     waitlist,
@@ -52,10 +54,10 @@ export function getEventCounts(event: EventRow): EventCounts {
   };
 }
 
-function findExistingRsvp(eventId: string, input: RsvpInput): RsvpRow | undefined {
-  const db = getDb();
+async function findExistingRsvp(eventId: string, input: RsvpInput): Promise<RsvpRow | undefined> {
+  const db = await getDb();
   if (input.manageToken) {
-    const byToken = db
+    const byToken = await db
       .select()
       .from(rsvps)
       .where(and(eq(rsvps.eventId, eventId), eq(rsvps.manageToken, input.manageToken)))
@@ -64,7 +66,7 @@ function findExistingRsvp(eventId: string, input: RsvpInput): RsvpRow | undefine
   }
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phone);
-  const candidates = db.select().from(rsvps).where(eq(rsvps.eventId, eventId)).all();
+  const candidates = await db.select().from(rsvps).where(eq(rsvps.eventId, eventId)).all();
   return candidates.find((row) => {
     const rowEmail = normalizeEmail(row.email);
     const rowPhone = normalizePhone(row.phone);
@@ -72,26 +74,27 @@ function findExistingRsvp(eventId: string, input: RsvpInput): RsvpRow | undefine
   });
 }
 
-export function upsertCarpool(
+export async function upsertCarpool(
   rsvpId: string,
   role: CarpoolRole | undefined,
   seats?: number | null,
   note?: string | null,
 ) {
-  const db = getDb();
+  const db = await getDb();
   const resolved: CarpoolRole = role || "none";
-  const existing = db.select().from(carpools).where(eq(carpools.rsvpId, rsvpId)).get();
+  const existing = await db.select().from(carpools).where(eq(carpools.rsvpId, rsvpId)).get();
   const values = {
     role: resolved,
     seats: resolved === "offer" ? seats || 1 : null,
     note: note?.trim() || null,
   };
   if (existing) {
-    db.update(carpools).set(values).where(eq(carpools.id, existing.id)).run();
+    await db.update(carpools).set(values).where(eq(carpools.id, existing.id)).run();
     return;
   }
   if (resolved === "none" && !note) return;
-  db.insert(carpools)
+  await db
+    .insert(carpools)
     .values({
       id: newId(),
       rsvpId,
@@ -123,26 +126,27 @@ function notifyPromoted(event: EventRow, guest: RsvpRow, appUrl?: string) {
   }
 }
 
-export function autoPromoteWaitlist(event: EventRow, appUrl?: string) {
-  const db = getDb();
+export async function autoPromoteWaitlist(event: EventRow, appUrl?: string) {
+  const db = await getDb();
   const promoted: RsvpRow[] = [];
-  db.transaction((tx) => {
+  await db.transaction(async (tx) => {
     while (true) {
       const goingCount =
-        tx
+        (await tx
           .select({ c: count() })
           .from(rsvps)
           .where(and(eq(rsvps.eventId, event.id), eq(rsvps.status, "going")))
-          .get()?.c ?? 0;
+          .get())?.c ?? 0;
       if (goingCount >= event.capacity) break;
-      const next = tx
+      const next = await tx
         .select()
         .from(rsvps)
         .where(and(eq(rsvps.eventId, event.id), eq(rsvps.status, "waitlist")))
         .orderBy(asc(rsvps.waitlistOrder), asc(rsvps.createdAt))
         .get();
       if (!next) break;
-      tx.update(rsvps)
+      await tx
+        .update(rsvps)
         .set({
           status: "going",
           waitlistOrder: null,
@@ -158,26 +162,27 @@ export function autoPromoteWaitlist(event: EventRow, appUrl?: string) {
   return promoted;
 }
 
-export function promoteRsvp(rsvpId: string, appUrl?: string): RsvpRow {
-  const db = getDb();
-  const row = db.select().from(rsvps).where(eq(rsvps.id, rsvpId)).get();
+export async function promoteRsvp(rsvpId: string, appUrl?: string): Promise<RsvpRow> {
+  const db = await getDb();
+  const row = await db.select().from(rsvps).where(eq(rsvps.id, rsvpId)).get();
   if (!row) throw new Error("RSVP not found.");
   if (row.status === "going") return row;
-  db.update(rsvps)
+  await db
+    .update(rsvps)
     .set({ status: "going", waitlistOrder: null, updatedAt: new Date() })
     .where(eq(rsvps.id, rsvpId))
     .run();
-  const event = db.select().from(events).where(eq(events.id, row.eventId)).get();
+  const event = await db.select().from(events).where(eq(events.id, row.eventId)).get();
   const updated = { ...row, status: "going" as const, waitlistOrder: null };
   if (event) notifyPromoted(event, updated, appUrl);
   return updated;
 }
 
-export function submitRsvp(
+export async function submitRsvp(
   event: EventRow,
   input: RsvpInput,
-): { rsvp: RsvpRow; previousStatus: RsvpRow["status"] | null } {
-  const db = getDb();
+): Promise<{ rsvp: RsvpRow; previousStatus: RsvpRow["status"] | null }> {
+  const db = await getDb();
   const name = input.guestName.trim();
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phone);
@@ -186,16 +191,16 @@ export function submitRsvp(
     throw new Error("Please include a phone number or an email so we can reach you.");
   }
 
-  const existing = findExistingRsvp(event.id, input);
+  const existing = await findExistingRsvp(event.id, input);
   const previousStatus = existing?.status ?? null;
 
-  const result = db.transaction((tx) => {
+  const result = await db.transaction(async (tx) => {
     const goingExcludingSelf =
-      tx
+      (await tx
         .select({ c: count() })
         .from(rsvps)
         .where(and(eq(rsvps.eventId, event.id), eq(rsvps.status, "going")))
-        .get()?.c ?? 0;
+        .get())?.c ?? 0;
     const occupied = goingExcludingSelf - (existing?.status === "going" ? 1 : 0);
     const spotsLeft = event.capacity - occupied;
 
@@ -206,7 +211,7 @@ export function submitRsvp(
       if (existing?.status === "waitlist") {
         waitlistOrder = existing.waitlistOrder;
       } else {
-        const waitlisted = tx
+        const waitlisted = await tx
           .select({ waitlistOrder: rsvps.waitlistOrder })
           .from(rsvps)
           .where(and(eq(rsvps.eventId, event.id), eq(rsvps.status, "waitlist")))
@@ -218,7 +223,8 @@ export function submitRsvp(
 
     const now = new Date();
     if (existing) {
-      tx.update(rsvps)
+      await tx
+        .update(rsvps)
         .set({
           guestName: name,
           email,
@@ -244,32 +250,31 @@ export function submitRsvp(
       createdAt: now,
       updatedAt: now,
     };
-    tx.insert(rsvps).values(row).run();
+    await tx.insert(rsvps).values(row).run();
     return row;
   });
 
   if (result.status === "going" && event.carpoolsEnabled) {
-    upsertCarpool(result.id, input.carpoolRole || "none", input.seats, input.carpoolNote);
+    await upsertCarpool(result.id, input.carpoolRole || "none", input.seats, input.carpoolNote);
   } else if (result.status !== "going") {
-    upsertCarpool(result.id, "none", null, null);
+    await upsertCarpool(result.id, "none", null, null);
   }
 
   if (previousStatus === "going" && result.status !== "going") {
-    autoPromoteWaitlist(event);
+    await autoPromoteWaitlist(event);
   }
 
   return { rsvp: result, previousStatus };
 }
 
-export function listRsvps(eventId: string) {
-  const db = getDb();
-  const rows = db.select().from(rsvps).where(eq(rsvps.eventId, eventId)).all();
-  const ids = new Set(rows.map((row) => row.id));
-  const pool = db
-    .select()
-    .from(carpools)
-    .all()
-    .filter((row) => ids.has(row.rsvpId));
+export async function listRsvps(eventId: string) {
+  const db = await getDb();
+  const rows = await db.select().from(rsvps).where(eq(rsvps.eventId, eventId)).all();
+  const ids = rows.map((row) => row.id);
+  const pool =
+    ids.length > 0
+      ? await db.select().from(carpools).where(inArray(carpools.rsvpId, ids)).all()
+      : [];
   const byRsvp = new Map(pool.map((row) => [row.rsvpId, row]));
   return rows
     .map((rsvp) => ({ rsvp, carpool: byRsvp.get(rsvp.id) ?? null }))

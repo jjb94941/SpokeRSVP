@@ -5,7 +5,7 @@ import { Flash } from "@/components/Ui";
 import { RsvpForm } from "@/components/RsvpForm";
 import { getCurrentHost, getGuestManageToken } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { carpools, events, rsvps } from "@/lib/db/schema";
+import { carpools, events, rsvps, type CarpoolRow, type RsvpRow } from "@/lib/db/schema";
 import { firstName } from "@/lib/format";
 import { getEventCounts } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
@@ -19,34 +19,32 @@ export default async function PublicRsvpPage({
 }) {
   const { token } = await params;
   const q = await searchParams;
-  const event = getDb().select().from(events).where(eq(events.shareToken, token)).get();
+  const db = await getDb();
+  const event = await db.select().from(events).where(eq(events.shareToken, token)).get();
   if (!event) notFound();
   const host = await getCurrentHost();
   const manageToken = q.m || (await getGuestManageToken(event.id));
   const existing = manageToken
-    ? getDb().select().from(rsvps).where(eq(rsvps.manageToken, manageToken)).get()
+    ? await db.select().from(rsvps).where(eq(rsvps.manageToken, manageToken)).get()
     : undefined;
   const existingForEvent = existing?.eventId === event.id ? existing : undefined;
   const carpool = existingForEvent
-    ? getDb().select().from(carpools).where(eq(carpools.rsvpId, existingForEvent.id)).get()
+    ? await db.select().from(carpools).where(eq(carpools.rsvpId, existingForEvent.id)).get()
     : undefined;
-  const counts = getEventCounts(event);
+  const counts = await getEventCounts(event);
   const full = counts.spotsLeft <= 0 && existingForEvent?.status !== "going";
   const canSeeCarpools =
     event.carpoolsEnabled && (host || existingForEvent?.status === "going");
-  const goingCarpools = canSeeCarpools
-    ? getDb()
-        .select()
-        .from(rsvps)
-        .where(eq(rsvps.eventId, event.id))
-        .all()
-        .flatMap((row) => {
-          if (row.status !== "going") return [];
-          const pool = getDb().select().from(carpools).where(eq(carpools.rsvpId, row.id)).get();
-          if (!pool || pool.role === "none") return [];
-          return [{ row, pool }];
-        })
+  const goingRows = canSeeCarpools
+    ? await db.select().from(rsvps).where(eq(rsvps.eventId, event.id)).all()
     : [];
+  const goingCarpools: { row: RsvpRow; pool: CarpoolRow }[] = [];
+  for (const row of goingRows) {
+    if (row.status !== "going") continue;
+    const pool = await db.select().from(carpools).where(eq(carpools.rsvpId, row.id)).get();
+    if (!pool || pool.role === "none") continue;
+    goingCarpools.push({ row, pool });
+  }
 
   return (
     <>

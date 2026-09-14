@@ -6,14 +6,14 @@ import { events } from "@/lib/db/schema";
 import { getEventCounts } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
 
-export default function HomePage() {
-  const upcoming = getDb()
-    .select()
-    .from(events)
-    .orderBy(desc(events.startsAt))
-    .all()
+export default async function HomePage() {
+  const db = await getDb();
+  const upcoming = (await db.select().from(events).orderBy(desc(events.startsAt)).all())
     .filter((event) => event.status === "published")
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const listed = await Promise.all(
+    upcoming.map(async (event) => ({ event, counts: await getEventCounts(event) })),
+  );
 
   return (
     <>
@@ -38,7 +38,7 @@ export default function HomePage() {
 
         <section id="events" className="mt-14">
           <h2 className="font-display text-3xl">Upcoming events</h2>
-          {upcoming.length === 0 ? (
+          {listed.length === 0 ? (
             <p className="mt-4 text-lg">
               No published events yet. Hosts can{" "}
               <Link href="/login" className="font-semibold text-teal underline">
@@ -48,9 +48,7 @@ export default function HomePage() {
             </p>
           ) : (
             <ul className="mt-6 grid gap-5">
-              {upcoming.map((event) => {
-                const counts = getEventCounts(event);
-                return (
+              {listed.map(({ event, counts }) => (
                   <li key={event.id} className="card">
                     <p className="text-base font-semibold text-teal">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
                     <h3 className="font-display mt-1 text-3xl">{event.title}</h3>
@@ -64,8 +62,7 @@ export default function HomePage() {
                       RSVP for {event.title}
                     </Link>
                   </li>
-                );
-              })}
+              ))}
             </ul>
           )}
         </section>

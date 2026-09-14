@@ -22,7 +22,7 @@ function formString(formData: FormData, key: string): string {
 export async function loginWithPassword(formData: FormData) {
   const email = formString(formData, "email");
   const password = formString(formData, "password");
-  const host = findHostByEmail(email);
+  const host = await findHostByEmail(email);
   if (!host || !password || !verifyHostPassword(host, password)) {
     redirect("/login?error=" + encodeURIComponent("That email or password did not match."));
   }
@@ -32,14 +32,14 @@ export async function loginWithPassword(formData: FormData) {
 
 export async function requestMagicLink(formData: FormData) {
   const email = formString(formData, "email");
-  const host = findHostByEmail(email);
+  const host = await findHostByEmail(email);
   if (!host) {
     redirect(
       "/login?error=" +
         encodeURIComponent("No host account uses that email. For this pilot, use the demo chair login."),
     );
   }
-  const { token } = createMagicLink(host.email);
+  const { token } = await createMagicLink(host.email);
   const url = `${await appUrl()}/login/magic?token=${encodeURIComponent(token)}`;
   const result = await sendEmail({
     to: host.email,
@@ -53,11 +53,12 @@ export async function requestMagicLink(formData: FormData) {
 }
 
 export async function completeMagicLogin(token: string) {
-  const email = consumeMagicLink(token);
+  const email = await consumeMagicLink(token);
   if (!email) {
     redirect("/login?error=" + encodeURIComponent("That sign-in link is invalid or has expired."));
   }
-  const host = getDb().select().from(hosts).where(eq(hosts.email, email)).get();
+  const db = await getDb();
+  const host = await db.select().from(hosts).where(eq(hosts.email, email)).get();
   if (!host) {
     redirect("/login?error=" + encodeURIComponent("No host account uses that email."));
   }
