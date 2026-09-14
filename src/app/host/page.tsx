@@ -14,16 +14,20 @@ export default async function HostHome({
 }) {
   const host = await requireHost();
   const params = await searchParams;
-  const rows = getDb()
+  const db = await getDb();
+  const rows = (await db
     .select()
     .from(events)
     .where(eq(events.hostId, host.id))
     .orderBy(desc(events.startsAt))
-    .all()
+    .all())
     .sort((a, b) => {
       if (a.status !== b.status) return a.status === "cancelled" ? 1 : -1;
       return a.startsAt.getTime() - b.startsAt.getTime();
     });
+  const listed = await Promise.all(
+    rows.map(async (event) => ({ event, counts: await getEventCounts(event) })),
+  );
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
@@ -37,13 +41,11 @@ export default async function HostHome({
           Create an event
         </Link>
       </div>
-      {rows.length === 0 ? (
+      {listed.length === 0 ? (
         <p className="mt-8 text-lg">No events yet. Create one and share the RSVP link with neighbors.</p>
       ) : (
         <ul className="mt-8 grid gap-5">
-          {rows.map((event) => {
-            const counts = getEventCounts(event);
-            return (
+          {listed.map(({ event, counts }) => (
               <li key={event.id} className="card">
                 {event.status === "cancelled" ? (
                   <p className="mb-2 font-bold text-terracotta">Cancelled</p>
@@ -59,8 +61,7 @@ export default async function HostHome({
                   Open dashboard for {event.title}
                 </Link>
               </li>
-            );
-          })}
+          ))}
         </ul>
       )}
     </main>

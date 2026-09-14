@@ -1,57 +1,122 @@
 import fs from "node:fs";
 import path from "node:path";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { createClient, type Client } from "@libsql/client";
+import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import * as schema from "./schema";
 
-const DEFAULT_DB = path.join(process.cwd(), "data", "spoke.db");
+const DEFAULT_URL = "file:./data/spoke.db";
 
-function resolveDbPath(): string {
-  const configured = process.env.DATABASE_PATH;
-  if (!configured) return DEFAULT_DB;
-  return path.isAbsolute(configured) ? configured : path.join(process.cwd(), configured);
+export function resolveDatabaseUrl(): string {
+  const configured = process.env.DATABASE_URL?.trim();
+  return configured || DEFAULT_URL;
 }
 
+export function fileUrlToPath(url: string): string | null {
+  if (url === ":memory:") return null;
+  if (!url.startsWith("file:")) return null;
+  let rest = url.slice("file:".length);
+  if (rest.startsWith("///")) rest = rest.slice(2);
+  else if (rest.startsWith("//localhost/")) rest = rest.slice("//localhost".length);
+  else if (rest.startsWith("//")) {
+    try {
+      return decodeURIComponent(new URL(url).pathname);
+    } catch {
+      rest = rest.replace(/^\/\/[^/]*/, "");
+    }
+  }
+  if (!rest) return null;
+  return path.isAbsolute(rest) ? rest : path.join(process.cwd(), rest);
+}
+
+type Db = LibSQLDatabase<typeof schema>;
+
 type GlobalDb = {
-  sqlite?: Database.Database;
-  db?: ReturnType<typeof drizzle<typeof schema>>;
-  dbPath?: string;
+  url?: string;
+  authToken?: string;
+  client?: Client;
+  db?: Db;
+  ready?: Promise<void>;
 };
 
 const globalForDb = globalThis as unknown as { __spoke?: GlobalDb };
 
-function open() {
-  const dbPath = resolveDbPath();
-  if (globalForDb.__spoke?.db && globalForDb.__spoke.dbPath === dbPath) {
-    return globalForDb.__spoke;
+function authTokenFromEnv(): string | undefined {
+  const token = process.env.DATABASE_AUTH_TOKEN?.trim();
+  return token || undefined;
+}
+
+async function connect(): Promise<Required<Pick<GlobalDb, "client" | "db">> & GlobalDb> {
+  const url = resolveDatabaseUrl();
+  const authToken = authTokenFromEnv();
+  const existing = globalForDb.__spoke;
+  if (existing?.db && existing.client && existing.url === url && existing.authToken === authToken) {
+    if (existing.ready) await existing.ready;
+    return existing as Required<Pick<GlobalDb, "client" | "db">> & GlobalDb;
   }
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  const sqlite = new Database(dbPath);
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("foreign_keys = ON");
-  ensureSchema(sqlite);
-  const db = drizzle(sqlite, { schema });
-  globalForDb.__spoke = { sqlite, db, dbPath };
-  return globalForDb.__spoke;
+  if (existing?.client) {
+    try {
+      existing.client.close();
+    } catch {
+      // ignore stale connection
+    }
+  }
+
+  const filePath = fileUrlToPath(url);
+  if (filePath) {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  }
+
+  const client = createClient({ url, authToken });
+  const db = drizzle(client, { schema });
+  const slot: GlobalDb = { url, authToken, client, db };
+  slot.ready = (async () => {
+    if (filePath) {
+      await client.execute("PRAGMA foreign_keys = ON");
+    }
+    await ensureSchema(client);
+  })();
+  globalForDb.__spoke = slot;
+  await slot.ready;
+  return slot as Required<Pick<GlobalDb, "client" | "db">> & GlobalDb;
 }
 
-export function getSqlite(): Database.Database {
-  return open().sqlite!;
+export async function getClient(): Promise<Client> {
+  const slot = await connect();
+  return slot.client;
 }
 
-export function getDb() {
-  return open().db!;
+export async function getDb(): Promise<Db> {
+  const slot = await connect();
+  return slot.db;
 }
 
 export function closeDb() {
-  if (globalForDb.__spoke?.sqlite) {
-    globalForDb.__spoke.sqlite.close();
-    globalForDb.__spoke = {};
+  if (globalForDb.__spoke?.client) {
+    try {
+      globalForDb.__spoke.client.close();
+    } catch {
+      // already closed
+    }
   }
+  globalForDb.__spoke = {};
 }
 
-export function ensureSchema(sqlite: Database.Database = getSqlite()) {
-  sqlite.exec(`
+/** Wipe all app rows. Used by `npm run db:reset` against Turso or a local file DB. */
+export async function wipeData() {
+  const client = await getClient();
+  await client.executeMultiple(`
+    DELETE FROM carpools;
+    DELETE FROM rsvps;
+    DELETE FROM magic_links;
+    DELETE FROM sessions;
+    DELETE FROM events;
+    DELETE FROM hosts;
+  `);
+}
+
+export async function ensureSchema(client?: Client) {
+  const target = client ?? (await getClient());
+  await target.executeMultiple(`
     CREATE TABLE IF NOT EXISTS hosts (
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,

@@ -12,7 +12,8 @@ import type { CarpoolRole } from "@/lib/db/schema";
 
 export async function guestRsvp(formData: FormData) {
   const shareToken = String(formData.get("shareToken") || "");
-  const event = getDb().select().from(events).where(eq(events.shareToken, shareToken)).get();
+  const db = await getDb();
+  const event = await db.select().from(events).where(eq(events.shareToken, shareToken)).get();
   if (!event) redirect("/");
   if (event.status === "cancelled") {
     redirect(`/e/${shareToken}?error=` + encodeURIComponent("This event has been cancelled."));
@@ -25,7 +26,7 @@ export async function guestRsvp(formData: FormData) {
 
   let rsvp;
   try {
-    ({ rsvp } = submitRsvp(event, {
+    ({ rsvp } = await submitRsvp(event, {
       guestName: String(formData.get("guestName") || ""),
       email: String(formData.get("email") || ""),
       phone: String(formData.get("phone") || ""),

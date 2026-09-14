@@ -16,13 +16,13 @@ export async function getCurrentHost(): Promise<Host | null> {
   const jar = await cookies();
   const sessionId = jar.get(SESSION_COOKIE)?.value;
   if (!sessionId) return null;
-  const db = getDb();
-  const session = db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
+  const db = await getDb();
+  const session = await db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
   if (!session || session.expiresAt.getTime() < Date.now()) {
-    if (session) db.delete(sessions).where(eq(sessions.id, sessionId)).run();
+    if (session) await db.delete(sessions).where(eq(sessions.id, sessionId)).run();
     return null;
   }
-  return db.select().from(hosts).where(eq(hosts.id, session.hostId)).get() ?? null;
+  return (await db.select().from(hosts).where(eq(hosts.id, session.hostId)).get()) ?? null;
 }
 
 export async function requireHost(): Promise<Host> {
@@ -32,10 +32,10 @@ export async function requireHost(): Promise<Host> {
 }
 
 export async function createSession(hostId: string) {
-  const db = getDb();
+  const db = await getDb();
   const id = newSecretToken(24);
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-  db.insert(sessions).values({ id, hostId, expiresAt }).run();
+  await db.insert(sessions).values({ id, hostId, expiresAt }).run();
   const jar = await cookies();
   jar.set(SESSION_COOKIE, id, {
     httpOnly: true,
@@ -50,7 +50,8 @@ export async function destroySession() {
   const jar = await cookies();
   const sessionId = jar.get(SESSION_COOKIE)?.value;
   if (sessionId) {
-    getDb().delete(sessions).where(eq(sessions.id, sessionId)).run();
+    const db = await getDb();
+    await db.delete(sessions).where(eq(sessions.id, sessionId)).run();
   }
   jar.set(SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
 }
@@ -59,17 +60,19 @@ export function verifyHostPassword(host: Host, password: string): boolean {
   return bcrypt.compareSync(password, host.passwordHash);
 }
 
-export function findHostByEmail(email: string): Host | undefined {
+export async function findHostByEmail(email: string): Promise<Host | undefined> {
   const normalized = normalizeEmail(email);
   if (!normalized) return undefined;
-  return getDb().select().from(hosts).where(eq(hosts.email, normalized)).get();
+  const db = await getDb();
+  return db.select().from(hosts).where(eq(hosts.email, normalized)).get();
 }
 
-export function createMagicLink(email: string): { token: string; expiresAt: Date } {
-  const db = getDb();
+export async function createMagicLink(email: string): Promise<{ token: string; expiresAt: Date }> {
+  const db = await getDb();
   const token = newSecretToken(24);
   const expiresAt = new Date(Date.now() + MAGIC_MINUTES * 60 * 1000);
-  db.insert(magicLinks)
+  await db
+    .insert(magicLinks)
     .values({
       id: newId(),
       email: normalizeEmail(email) || email.trim().toLowerCase(),
@@ -80,15 +83,15 @@ export function createMagicLink(email: string): { token: string; expiresAt: Date
   return { token, expiresAt };
 }
 
-export function consumeMagicLink(token: string): string | null {
-  const db = getDb();
-  const row = db
+export async function consumeMagicLink(token: string): Promise<string | null> {
+  const db = await getDb();
+  const row = await db
     .select()
     .from(magicLinks)
     .where(eq(magicLinks.tokenHash, sha256Hex(token)))
     .get();
   if (!row || row.usedAt || row.expiresAt.getTime() < Date.now()) return null;
-  db.update(magicLinks).set({ usedAt: new Date() }).where(eq(magicLinks.id, row.id)).run();
+  await db.update(magicLinks).set({ usedAt: new Date() }).where(eq(magicLinks.id, row.id)).run();
   return row.email;
 }
 

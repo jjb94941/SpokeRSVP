@@ -64,7 +64,8 @@ export async function createEvent(formData: FormData) {
   }
   const now = new Date();
   const id = newId();
-  getDb()
+  const db = await getDb();
+  await db
     .insert(events)
     .values({
       id,
@@ -82,7 +83,8 @@ export async function createEvent(formData: FormData) {
 export async function updateEvent(formData: FormData) {
   const host = await requireHost();
   const id = String(formData.get("id") || "");
-  const existing = getDb()
+  const db = await getDb();
+  const existing = await db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.hostId, host.id)))
@@ -94,7 +96,7 @@ export async function updateEvent(formData: FormData) {
   } catch (error) {
     redirect(`/host/events/${id}/edit?error=` + encodeURIComponent((error as Error).message));
   }
-  getDb()
+  await db
     .update(events)
     .set({ ...values, updatedAt: new Date() })
     .where(eq(events.id, id))
@@ -109,13 +111,14 @@ export async function cancelEvent(formData: FormData) {
   if (confirm !== "yes") {
     redirect(`/host/events/${id}?error=` + encodeURIComponent("Check the box to confirm cancellation."));
   }
-  const existing = getDb()
+  const db = await getDb();
+  const existing = await db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.hostId, host.id)))
     .get();
   if (!existing) redirect("/host");
-  getDb()
+  await db
     .update(events)
     .set({ status: "cancelled", updatedAt: new Date() })
     .where(eq(events.id, id))
@@ -126,7 +129,8 @@ export async function cancelEvent(formData: FormData) {
 export async function restoreEvent(formData: FormData) {
   const host = await requireHost();
   const id = String(formData.get("id") || "");
-  getDb()
+  const db = await getDb();
+  await db
     .update(events)
     .set({ status: "published", updatedAt: new Date() })
     .where(and(eq(events.id, id), eq(events.hostId, host.id)))
@@ -138,14 +142,15 @@ export async function hostPromote(formData: FormData) {
   const host = await requireHost();
   const eventId = String(formData.get("eventId") || "");
   const rsvpId = String(formData.get("rsvpId") || "");
-  const event = getDb()
+  const db = await getDb();
+  const event = await db
     .select()
     .from(events)
     .where(and(eq(events.id, eventId), eq(events.hostId, host.id)))
     .get();
   if (!event) redirect("/host");
   try {
-    promoteRsvp(rsvpId, await appUrl());
+    await promoteRsvp(rsvpId, await appUrl());
   } catch (error) {
     redirect(`/host/events/${eventId}?error=` + encodeURIComponent((error as Error).message));
   }
