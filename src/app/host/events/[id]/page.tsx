@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { Flash } from "@/components/Ui";
 import { cancelEvent, hostPromote, restoreEvent } from "@/lib/actions/events";
-import { appUrl, requireHost } from "@/lib/auth";
+import { appUrl } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { events } from "@/lib/db/schema";
+import { hosts } from "@/lib/db/schema";
 import { firstName, formatPhoneDisplay } from "@/lib/format";
+import { findManagedEvent, isAdmin } from "@/lib/roles";
 import { getEventCounts, listRsvps, type RsvpListRow } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
 
@@ -18,16 +19,13 @@ export default async function HostEventPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
-  const host = await requireHost();
   const { id } = await params;
   const q = await searchParams;
+  const managed = await findManagedEvent(id);
+  if (!managed) notFound();
+  const { host, event } = managed;
   const db = await getDb();
-  const event = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.id, id), eq(events.hostId, host.id)))
-    .get();
-  if (!event) notFound();
+  const creator = await db.select().from(hosts).where(eq(hosts.id, event.hostId)).get();
   const counts = await getEventCounts(event);
   const rows = await listRsvps(event.id);
   const going = rows.filter((row) => row.rsvp.status === "going");
@@ -52,6 +50,11 @@ export default async function HostEventPage({
       <h1 className="font-display text-4xl">{event.title}</h1>
       <p className="mt-2 text-xl">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
       <p className="mt-1 text-lg">{event.locationName}</p>
+      {isAdmin(host) && creator ? (
+        <p className="mt-1 text-base text-ink/80">
+          Created by {event.hostId === host.id ? "you" : `${creator.name} (${creator.email})`}
+        </p>
+      ) : null}
       {event.streetAddress ? (
         <p className="mt-1 text-base text-ink/80">Private street address: {event.streetAddress}</p>
       ) : null}

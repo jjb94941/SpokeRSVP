@@ -121,3 +121,18 @@ ${opts.url}
 
 This link expires in 30 minutes. If you did not ask for it, you can ignore this email.`;
 }
+
+export function subAdminWelcomeText(opts: { name: string; loginUrl: string; appointedBy: string }): string {
+  return `Hello ${opts.name},
+
+${opts.appointedBy} added you as a SpokeRSVP sub-administrator for Mill Valley Village.
+
+You can create events and manage the ones you create. You cannot change other people’s events or anyone’s role.
+
+Sign in here:
+${opts.loginUrl}
+
+Ask the administrator for your temporary password, or use “email me a sign-in link” on that page.
+
+Mill Valley Village — SpokeRSVP`;
+}

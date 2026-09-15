@@ -59,28 +59,29 @@ To use a Turso database locally instead (same setup you will use on Vercel):
 
 Never commit `.env` or real tokens.
 
-### Demo host (local / development only)
+### Demo hosts (local / development only)
 
-Seeded by `npm run db:seed`. **Do not use these credentials on a public website. Change this password before any production deploy.**
+Seeded by `npm run db:seed`. **Do not use these credentials on a public website. Change these passwords before any production deploy.**
 
-| | |
-| --- | --- |
-| Email | `chair@millvalleyvillage.org` |
-| Password | `millvalley` |
+| | Administrator | Sub-administrator |
+| --- | --- | --- |
+| Email | `chair@millvalleyvillage.org` | `volunteer@millvalleyvillage.org` |
+| Password | `millvalley` | `millvalley` |
+| Can manage | All events, and host roles | Only events they created |
 
 Sign in at `/login`. You can also request a magic-link email; without a Resend key the link is printed on the login page and in the server log.
 
-The seed also creates three Mill Valley sample events (walkers/hike with carpools, coffee, book club with a waitlist). Rebuild them with `npm run db:reset` (works for both the local file DB and Turso).
+The seed also creates Mill Valley sample events (walkers/hike with carpools, coffee, book club with a waitlist, plus a stretch class owned by the volunteer). Rebuild them with `npm run db:reset` (works for both the local file DB and Turso).
 
 ### Useful scripts
 
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | App at http://localhost:3000 |
-| `npm run db:seed` | Create schema + demo host + sample events (file: or Turso) |
+| `npm run db:seed` | Create schema + demo hosts + sample events (file: or Turso) |
 | `npm run db:reset` | Wipe that database and seed again |
 | `npm run reminders` | Email-stub (or Resend) reminders for Going guests in the next 48 hours |
-| `npm run test:smoke` | Waitlist auto-promote + duplicate RSVP checks (uses a temp file DB) |
+| `npm run test:smoke` | Waitlist auto-promote, duplicate RSVP, host-role, and schema-migration checks (uses a temp file DB) |
 | `npm run build` | Production build |
 
 CI / offline build (no Turso network):
@@ -118,11 +119,57 @@ You can also run reminders manually: `POST` or `GET` `/api/reminders` with `Auth
 
 ## What the MVP does
 
-- **Hosts** sign in with email/password or a magic link, create events (title, date/time in Pacific Time, location name, optional private street address, capacity, description, carpools on/off), copy a share link, edit or cancel, export a CSV, see RSVPs / waitlist / carpools, and **promote** someone from the waitlist.
+- **Hosts** sign in with email/password or a magic link. **Administrators** can view, edit, cancel, export, and manage RSVPs/waitlists/carpools for **every** event, create events, and appoint or remove sub-administrators at `/host/admins`. **Sub-administrators** can create events and manage **only** the events they created. They cannot change anyone’s role. Existing hosts default to administrator when the `hosts.role` column is added.
 - **Guests** open `/e/<token>` with **no account**. They RSVP with name plus phone **or** email: Going, not going, or waitlist when the event is full. Changing from Going to not going **auto-promotes** the next waitlisted neighbor.
 - **Carpools** (when enabled): offer seats or need a ride. Visible to Going guests (first names) and the host (full contact).
 - **Email**: confirmation, waitlist promotion, and reminders go through [Resend](https://resend.com) when `RESEND_API_KEY` is set. Otherwise they are **logged** (local stub). Magic links work the same way.
 - **SMS**: not implemented (`TODO` in `src/lib/notify.ts` and `npm run reminders`).
+
+## Host roles
+
+- **Administrator** — complete control over every event (view, edit, cancel, RSVP/waitlist/carpool management, CSV export), can create events, and can appoint, promote, demote, or remove hosts at `/host/admins`.
+- **Sub-administrator** — can create events and manage only events they created. They cannot open other people’s dashboards and cannot change anyone’s role.
+
+Existing production hosts are treated as administrators: `ensureSchema` adds `hosts.role` with `DEFAULT 'admin'` (ALTER-safe on SQLite/Turso).
+
+### Local test (before any production deploy)
+
+```bash
+git fetch && git checkout cursor/admin-sub-admin-roles-5ebd
+cp .env.example .env  # use file:./data/spoke.db for local
+npm install && npm run db:reset && npm run dev
+```
+
+Then open [http://localhost:3000](http://localhost:3000).
+
+**As administrator** — sign in as `chair@millvalleyvillage.org` / `millvalley`:
+
+1. Host home should list **all** events, including **Saturday stretch & chat** (created by the volunteer). **Manage hosts** should appear in the header.
+2. Open **Manage hosts** (`/host/admins`). Appoint a sub-administrator: name, email, and an optional temporary password (leave blank to generate one). The password is shown once on that page — share it with the new host. They can also use “email me a sign-in link”.
+3. Confirm you cannot remove or demote the last administrator (yourself).
+
+**As sub-administrator** — sign out, then sign in as `volunteer@millvalleyvillage.org` / `millvalley` (or the host you just appointed):
+
+1. Host home should show **only** events that person created. Chair-owned events (walkers, coffee, book club) must not appear.
+2. **Manage hosts** should be hidden. Opening `/host/admins` should send you back to host home.
+3. Paste a chair-owned event dashboard URL (from the admin session). It should 404. Edit and CSV export for that event should also 404.
+
+Confirm the footer on public and host pages reads **Ver. 2.0 · September 15, 2026**.
+
+`npm run test:smoke` also checks role policy helpers, the `hosts.role` migration, and the version label.
+
+Do not deploy this to Vercel production until that local check is done.
+
+## Versioning
+
+Every release bumps **both** fields in `src/lib/version.ts`:
+
+| Field | Meaning |
+| --- | --- |
+| `number` | `XX.YY` — XX for major updates, YY for minor changes and bug fixes |
+| `releaseDate` | ISO date (`YYYY-MM-DD`) of the release |
+
+The footer always shows both together as `Ver. XX.YY · Month D, YYYY` (never the version number alone). See [CHANGELOG.md](CHANGELOG.md).
 
 ## Privacy / pilot disclaimer
 

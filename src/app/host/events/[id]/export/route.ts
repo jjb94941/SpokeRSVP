@@ -1,26 +1,15 @@
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
-import { getCurrentHost } from "@/lib/auth";
-import { getDb } from "@/lib/db";
-import { events } from "@/lib/db/schema";
 import { csvEscape, formatPhoneDisplay } from "@/lib/format";
+import { findManagedEvent } from "@/lib/roles";
 import { listRsvps } from "@/lib/rsvp-service";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
-  const host = await getCurrentHost();
-  if (!host) {
-    return NextResponse.redirect(new URL("/login", _request.url));
-  }
   const { id } = await context.params;
-  const db = await getDb();
-  const event = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.id, id), eq(events.hostId, host.id)))
-    .get();
-  if (!event) return new NextResponse("Not found", { status: 404 });
+  const managed = await findManagedEvent(id);
+  if (!managed) return new NextResponse("Not found", { status: 404 });
+  const { event } = managed;
 
   const rows = await listRsvps(event.id);
   const header = ["Name", "Email", "Phone", "Status", "Carpool", "Seats", "Ride note", "RSVP updated"];

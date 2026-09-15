@@ -33,15 +33,15 @@ export default async function LoginPage({
         ) : null}
 
         <section className="card mb-6 border-2 border-terracotta/40">
-          <h2 className="text-xl font-bold">Local / development demo host</h2>
+          <h2 className="text-xl font-bold">Local / development demo hosts</h2>
           <p className="mt-2 text-base">
-            This account is seeded for trying the app on your computer. Do not use these credentials on a
+            These accounts are seeded for trying the app on your computer. Do not use these credentials on a
             public website.
           </p>
           <p className="mt-3 text-lg">
-            Email: <strong>chair@millvalleyvillage.org</strong>
+            Administrator: <strong>chair@millvalleyvillage.org</strong> / <strong>millvalley</strong>
             <br />
-            Password: <strong>millvalley</strong>
+            Sub-administrator: <strong>volunteer@millvalleyvillage.org</strong> / <strong>millvalley</strong>
           </p>
         </section>
 
