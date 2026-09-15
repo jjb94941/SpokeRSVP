@@ -19,6 +19,7 @@ import {
   isAdmin,
   parseNewSubAdmin,
 } from "../src/lib/roles";
+import { APP_VERSION, appVersionLabel } from "../src/lib/version";
 
 config();
 
@@ -198,8 +199,16 @@ async function hostRoleMigration() {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+function versionLabel() {
+  assert.equal(APP_VERSION.number, "2.0");
+  assert.equal(APP_VERSION.releaseDate, "2026-09-15");
+  assert.equal(appVersionLabel(), "Ver. 2.0 · September 15, 2026");
+  assert.match(appVersionLabel(), /^Ver\. \d+\.\d+ · [A-Za-z]+ \d{1,2}, \d{4}$/);
+}
+
 async function main() {
   roundtripPacific();
+  versionLabel();
   hostRolePolicies();
   await hostRoleMigration();
   await rsvpFlow();

@@ -140,6 +140,33 @@ Existing production hosts are treated as administrators: `ensureSchema` adds `ho
 
 `npm run test:smoke` also checks role policy helpers and that a pre-role `hosts` table gets `role = admin`.
 
+To try this branch on a laptop **before any production deploy**:
+
+```bash
+git fetch && git checkout cursor/admin-sub-admin-roles-5ebd
+cp .env.example .env   # keep DATABASE_URL=file:./data/spoke.db for local
+npm install && npm run db:reset && npm run dev
+```
+
+Then:
+
+1. Sign in as the administrator (`chair@millvalleyvillage.org` / `millvalley`). Confirm **Manage hosts** and that **Saturday stretch & chat** is listed. Open `/host/admins`, appoint a new sub-administrator (name, email, optional temporary password). The temporary password is shown once on that page.
+2. Sign out, sign in as the seeded volunteer (`volunteer@millvalleyvillage.org` / `millvalley`) or the host you just appointed. Confirm you only see events you created, cannot open `/host/admins`, and a chair-owned dashboard URL 404s.
+3. Confirm the footer on public and host pages reads **Ver. 2.0 · September 15, 2026**.
+
+Do not deploy this to Vercel production until that local check is done.
+
+## Versioning
+
+Every release bumps **both** fields in `src/lib/version.ts`:
+
+| Field | Meaning |
+| --- | --- |
+| `number` | `XX.YY` — XX for major updates, YY for minor changes and bug fixes |
+| `releaseDate` | ISO date (`YYYY-MM-DD`) of the release |
+
+The footer always shows both together as `Ver. XX.YY · Month D, YYYY` (never the version number alone). See [CHANGELOG.md](CHANGELOG.md).
+
 ## Privacy / pilot disclaimer
 
 This is a **village pilot**, not a production membership system.
