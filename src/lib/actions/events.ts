@@ -1,12 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { appUrl, requireHost } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events } from "@/lib/db/schema";
 import { newId, newShareToken } from "@/lib/ids";
+import { findManagedEvent } from "@/lib/roles";
 import { pacificWallToUtc } from "@/lib/time";
 import { promoteRsvp } from "@/lib/rsvp-service";
 
@@ -81,21 +82,16 @@ export async function createEvent(formData: FormData) {
 }
 
 export async function updateEvent(formData: FormData) {
-  const host = await requireHost();
   const id = String(formData.get("id") || "");
-  const db = await getDb();
-  const existing = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.id, id), eq(events.hostId, host.id)))
-    .get();
-  if (!existing) redirect("/host");
+  const managed = await findManagedEvent(id);
+  if (!managed) redirect("/host");
   let values;
   try {
     values = readEventForm(formData);
   } catch (error) {
     redirect(`/host/events/${id}/edit?error=` + encodeURIComponent((error as Error).message));
   }
+  const db = await getDb();
   await db
     .update(events)
     .set({ ...values, updatedAt: new Date() })
@@ -105,19 +101,14 @@ export async function updateEvent(formData: FormData) {
 }
 
 export async function cancelEvent(formData: FormData) {
-  const host = await requireHost();
   const id = String(formData.get("id") || "");
   const confirm = String(formData.get("confirm") || "");
   if (confirm !== "yes") {
     redirect(`/host/events/${id}?error=` + encodeURIComponent("Check the box to confirm cancellation."));
   }
+  const managed = await findManagedEvent(id);
+  if (!managed) redirect("/host");
   const db = await getDb();
-  const existing = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.id, id), eq(events.hostId, host.id)))
-    .get();
-  if (!existing) redirect("/host");
   await db
     .update(events)
     .set({ status: "cancelled", updatedAt: new Date() })
@@ -127,28 +118,23 @@ export async function cancelEvent(formData: FormData) {
 }
 
 export async function restoreEvent(formData: FormData) {
-  const host = await requireHost();
   const id = String(formData.get("id") || "");
+  const managed = await findManagedEvent(id);
+  if (!managed) redirect("/host");
   const db = await getDb();
   await db
     .update(events)
     .set({ status: "published", updatedAt: new Date() })
-    .where(and(eq(events.id, id), eq(events.hostId, host.id)))
+    .where(eq(events.id, id))
     .run();
   redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event is open again."));
 }
 
 export async function hostPromote(formData: FormData) {
-  const host = await requireHost();
   const eventId = String(formData.get("eventId") || "");
   const rsvpId = String(formData.get("rsvpId") || "");
-  const db = await getDb();
-  const event = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.id, eventId), eq(events.hostId, host.id)))
-    .get();
-  if (!event) redirect("/host");
+  const managed = await findManagedEvent(eventId);
+  if (!managed) redirect("/host");
   try {
     await promoteRsvp(rsvpId, await appUrl());
   } catch (error) {

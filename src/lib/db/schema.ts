@@ -1,10 +1,14 @@
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+export const HOST_ROLES = ["admin", "sub_admin"] as const;
+export type HostRole = (typeof HOST_ROLES)[number];
+
 export const hosts = sqliteTable("hosts", {
   id: text("id").primaryKey(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
+  role: text("role", { enum: HOST_ROLES }).notNull().default("admin"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });
 

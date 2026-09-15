@@ -74,6 +74,24 @@ h3,
   background: #3a635c;
 }
 
+.btn-secondary {
+  display: inline-flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  border: 2px solid rgb(61 47 40 / 0.2);
+  background: #ffffff;
+  padding: 0 1.5rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #3d2f28;
+}
+
+.btn-secondary:hover {
+  background: #f3e8d9;
+}
+
 .card {
   border-radius: 1.25rem;
   background: #f7efe4;
