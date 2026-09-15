@@ -132,27 +132,31 @@ You can also run reminders manually: `POST` or `GET` `/api/reminders` with `Auth
 
 Existing production hosts are treated as administrators: `ensureSchema` adds `hosts.role` with `DEFAULT 'admin'` (ALTER-safe on SQLite/Turso).
 
-### Local smoke check (admin vs sub-admin)
-
-1. `npm run db:reset` then `npm run dev`.
-2. Sign in as `chair@millvalleyvillage.org` / `millvalley`. Host home should list **all** events, including **Saturday stretch & chat**, and **Manage hosts** should appear. Open `/host/admins` and confirm both demo accounts.
-3. Sign out, then sign in as `volunteer@millvalleyvillage.org` / `millvalley`. Host home should show **only** the stretch class. **Manage hosts** should not appear. Opening `/host/admins` should send you back to host home. Pasting a chair-owned event dashboard URL should 404.
-
-`npm run test:smoke` also checks role policy helpers and that a pre-role `hosts` table gets `role = admin`.
-
-To try this branch on a laptop **before any production deploy**:
+### Local test (before any production deploy)
 
 ```bash
 git fetch && git checkout cursor/admin-sub-admin-roles-5ebd
-cp .env.example .env   # keep DATABASE_URL=file:./data/spoke.db for local
+cp .env.example .env  # use file:./data/spoke.db for local
 npm install && npm run db:reset && npm run dev
 ```
 
-Then:
+Then open [http://localhost:3000](http://localhost:3000).
 
-1. Sign in as the administrator (`chair@millvalleyvillage.org` / `millvalley`). Confirm **Manage hosts** and that **Saturday stretch & chat** is listed. Open `/host/admins`, appoint a new sub-administrator (name, email, optional temporary password). The temporary password is shown once on that page.
-2. Sign out, sign in as the seeded volunteer (`volunteer@millvalleyvillage.org` / `millvalley`) or the host you just appointed. Confirm you only see events you created, cannot open `/host/admins`, and a chair-owned dashboard URL 404s.
-3. Confirm the footer on public and host pages reads **Ver. 2.0 · September 15, 2026**.
+**As administrator** — sign in as `chair@millvalleyvillage.org` / `millvalley`:
+
+1. Host home should list **all** events, including **Saturday stretch & chat** (created by the volunteer). **Manage hosts** should appear in the header.
+2. Open **Manage hosts** (`/host/admins`). Appoint a sub-administrator: name, email, and an optional temporary password (leave blank to generate one). The password is shown once on that page — share it with the new host. They can also use “email me a sign-in link”.
+3. Confirm you cannot remove or demote the last administrator (yourself).
+
+**As sub-administrator** — sign out, then sign in as `volunteer@millvalleyvillage.org` / `millvalley` (or the host you just appointed):
+
+1. Host home should show **only** events that person created. Chair-owned events (walkers, coffee, book club) must not appear.
+2. **Manage hosts** should be hidden. Opening `/host/admins` should send you back to host home.
+3. Paste a chair-owned event dashboard URL (from the admin session). It should 404. Edit and CSV export for that event should also 404.
+
+Confirm the footer on public and host pages reads **Ver. 2.0 · September 15, 2026**.
+
+`npm run test:smoke` also checks role policy helpers, the `hosts.role` migration, and the version label.
 
 Do not deploy this to Vercel production until that local check is done.
 
