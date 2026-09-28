@@ -108,6 +108,34 @@ h3,
   background: var(--color-card);
 }
 
+.chip {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 2px solid var(--color-teal);
+  background: transparent;
+  padding: 8px 18px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-ink);
+}
+
+.chip:hover {
+  background: var(--color-card);
+}
+
+.chip-active {
+  background: var(--color-teal);
+  color: #fff;
+}
+
+.chip-active:hover {
+  background: var(--color-teal-dark);
+}
+
 .card {
   border-radius: 14px;
   background: var(--color-card);

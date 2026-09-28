@@ -20,6 +20,7 @@ import {
   parseNewSubAdmin,
 } from "../src/lib/roles";
 import { APP_VERSION, appVersionLabel } from "../src/lib/version";
+import { parseVillageFilter, toggleVillageHref, villageFilterHref } from "../src/lib/villages";
 
 config();
 
@@ -213,6 +214,16 @@ async function hostRoleMigration() {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+function villageFilters() {
+  assert.deepEqual(parseVillageFilter(undefined), []);
+  assert.deepEqual(parseVillageFilter("Mill Valley,Nope,Tiburon"), ["Tiburon", "Mill Valley"]);
+  assert.deepEqual(parseVillageFilter("Tiburon,Mill Valley,Novato,San Rafael,Twin Cities,Ross Valley"), []);
+  assert.equal(villageFilterHref([]), "/");
+  assert.equal(toggleVillageHref([], "Novato"), "/?villages=Novato");
+  assert.equal(toggleVillageHref(["Novato", "Tiburon"], "Tiburon"), "/?villages=Novato");
+  assert.equal(toggleVillageHref(["Novato"], "Ross Valley"), "/?villages=Novato%2CRoss%20Valley");
+}
+
 function versionLabel() {
   assert.equal(APP_VERSION.number, "2.0");
   assert.equal(APP_VERSION.releaseDate, "2026-09-15");
@@ -222,6 +233,7 @@ function versionLabel() {
 
 async function main() {
   roundtripPacific();
+  villageFilters();
   versionLabel();
   hostRolePolicies();
   await hostRoleMigration();

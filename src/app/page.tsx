@@ -1,18 +1,44 @@
 import Link from "next/link";
-import { desc } from "drizzle-orm";
+import { desc, inArray } from "drizzle-orm";
 import { SiteFooter, SiteHeader } from "@/components/Chrome";
+import { Flash } from "@/components/Ui";
+import { memberRsvp, signInMember, signOutMember } from "@/lib/actions/member";
+import { getMemberEmail } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { events } from "@/lib/db/schema";
+import { events, rsvps } from "@/lib/db/schema";
+import { normalizeEmail } from "@/lib/format";
 import { getEventCounts } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
+import { VILLAGES, parseVillageFilter, toggleVillageHref, villageFilterHref, villageTitle } from "@/lib/villages";
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ villages?: string; ok?: string; error?: string }>;
+}) {
+  const params = await searchParams;
+  const selected = parseVillageFilter(params.villages);
+  const memberEmail = await getMemberEmail();
+  const returnTo = villageFilterHref(selected);
   const db = await getDb();
-  const upcoming = (await db.select().from(events).orderBy(desc(events.startsAt)).all())
+  const published = (await db.select().from(events).orderBy(desc(events.startsAt)).all())
     .filter((event) => event.status === "published")
+    .filter((event) => selected.length === 0 || selected.includes(event.village as (typeof VILLAGES)[number]))
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const eventIds = published.map((event) => event.id);
+  const memberRsvps =
+    memberEmail && eventIds.length > 0
+      ? (await db.select().from(rsvps).where(inArray(rsvps.eventId, eventIds)).all()).filter(
+          (row) => normalizeEmail(row.email) === memberEmail,
+        )
+      : [];
+  const rsvpByEvent = new Map(memberRsvps.map((row) => [row.eventId, row]));
   const listed = await Promise.all(
-    upcoming.map(async (event) => ({ event, counts: await getEventCounts(event) })),
+    published.map(async (event) => ({
+      event,
+      counts: await getEventCounts(event),
+      rsvp: rsvpByEvent.get(event.id),
+    })),
   );
 
   return (
@@ -20,48 +46,100 @@ export default async function HomePage() {
       <SiteHeader />
       <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
         <p className="text-lg font-semibold tracking-wide text-teal">Marin Villages</p>
-        <h1 className="font-display mt-2 max-w-3xl text-4xl leading-tight font-semibold sm:text-5xl">
-          RSVP for village gatherings — waitlist and rides included.
-        </h1>
-        <p className="mt-4 max-w-2xl text-xl">
-          A simple tool for neighbors. No account needed to RSVP. Hosts keep the list, the waitlist, and
-          optional carpools in one place. Complements Helpful Village; it does not replace it.
+        <h1 className="font-display mt-2 max-w-3xl text-4xl leading-tight font-semibold">Village events</h1>
+        <p className="mt-3 max-w-2xl text-[17px] text-ink">
+          See gatherings across the villages, or choose the ones you want. Sign up with your email. No password.
         </p>
-        <div className="mt-8 flex flex-wrap gap-4">
-          <a href="#events" className="btn-primary">
-            See upcoming events
-          </a>
-          <Link href="/login" className="btn-teal">
-            Host sign in
+        <Flash ok={params.ok} error={params.error} />
+
+        {memberEmail ? (
+          <form action={signOutMember} className="mt-6 flex flex-wrap items-center gap-3">
+            <input type="hidden" name="returnTo" value={returnTo} />
+            <p className="meta-line">
+              Signed in as <span className="font-bold text-ink">{memberEmail}</span>
+            </p>
+            <button type="submit" className="btn-secondary">
+              Use a different email
+            </button>
+          </form>
+        ) : (
+          <form action={signInMember} className="card mt-6 max-w-xl">
+            <input type="hidden" name="returnTo" value={returnTo} />
+            <label htmlFor="email" className="mb-2 block text-[17px] font-bold text-ink">
+              Your email
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="you@example.com"
+              className="w-full min-h-14 rounded-[14px] border-2 border-card-border bg-white px-4 text-[17px] text-ink"
+            />
+            <button type="submit" className="btn-primary mt-4">
+              Continue with email
+            </button>
+          </form>
+        )}
+
+        <div className="mt-8 flex flex-wrap gap-3" role="group" aria-label="Filter by village">
+          <Link href="/" className={selected.length === 0 ? "chip chip-active" : "chip"} aria-current={selected.length === 0 ? "true" : undefined}>
+            All villages
           </Link>
+          {VILLAGES.map((village) => {
+            const on = selected.includes(village);
+            return (
+              <Link
+                key={village}
+                href={toggleVillageHref(selected, village)}
+                className={on ? "chip chip-active" : "chip"}
+                aria-current={on ? "true" : undefined}
+              >
+                {village}
+              </Link>
+            );
+          })}
         </div>
 
-        <section id="events" className="mt-14">
-          <h2 className="font-display text-3xl">Upcoming events</h2>
+        <section className="mt-8">
+          <h2 className="font-display text-[28px] font-bold">
+            {selected.length === 0 ? "All village events" : selected.map(villageTitle).join(" · ")}
+          </h2>
           {listed.length === 0 ? (
-            <p className="mt-4 text-lg">
-              No published events yet. Hosts can{" "}
-              <Link href="/login" className="font-semibold text-teal underline">
-                sign in
-              </Link>{" "}
-              to create one. If you just cloned this project, run <code>npm run db:seed</code>.
+            <p className="mt-4 text-[17px] text-ink">
+              No published events for this choice.{" "}
+              <Link href="/" className="font-bold text-teal underline">
+                Show all villages
+              </Link>
+              .
             </p>
           ) : (
-            <ul className="mt-6 grid gap-5">
-              {listed.map(({ event, counts }) => (
-                  <li key={event.id} className="card">
-                    <p className="text-base font-semibold text-teal">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
-                    <h3 className="font-display mt-1 text-3xl">{event.title}</h3>
-                    <p className="mt-2 text-lg">{event.locationName}</p>
-                    <p className="mt-3 text-lg">
-                      {counts.going} going of {event.capacity}
-                      {counts.waitlist ? ` · ${counts.waitlist} on the waitlist` : ""}
-                      {event.carpoolsEnabled ? " · Carpools welcome" : ""}
-                    </p>
-                    <Link href={`/e/${event.shareToken}`} className="btn-primary mt-5">
-                      RSVP for {event.title}
-                    </Link>
-                  </li>
+            <ul className="mt-5 grid gap-[14px]">
+              {listed.map(({ event, counts, rsvp }) => (
+                <li key={event.id} className="card">
+                  <p className="meta-line">{villageTitle(event.village)}</p>
+                  <h3 className="font-display mt-1 text-[24px] leading-tight font-bold">{event.title}</h3>
+                  <p className="meta-line mt-2">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
+                  <p className="meta-line">{event.locationName}</p>
+                  <p className="status-line mt-2.5">
+                    {counts.going} going · {counts.spotsLeft} open {counts.spotsLeft === 1 ? "seat" : "seats"}
+                    {counts.waitlist ? ` · ${counts.waitlist} waitlist` : ""}
+                  </p>
+                  {rsvp?.status === "going" ? (
+                    <p className="status-line mt-4">You are signed up.</p>
+                  ) : rsvp?.status === "waitlist" ? (
+                    <p className="status-line mt-4">You are on the waitlist.</p>
+                  ) : (
+                    <form action={memberRsvp} className="mt-4">
+                      <input type="hidden" name="returnTo" value={returnTo} />
+                      <input type="hidden" name="eventId" value={event.id} />
+                      <button type="submit" className="btn-primary">
+                        {counts.spotsLeft === 0 ? `Join the waitlist for ${event.title}` : `Sign up for ${event.title}`}
+                      </button>
+                    </form>
+                  )}
+                </li>
               ))}
             </ul>
           )}

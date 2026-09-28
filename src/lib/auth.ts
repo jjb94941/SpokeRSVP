@@ -10,6 +10,7 @@ import { normalizeEmail } from "./format";
 export const SESSION_COOKIE = "spoke_session";
 export const GUEST_COOKIE_PREFIX = "spoke_guest_";
 export const NEW_HOST_PASSWORD_COOKIE = "spoke_new_host_pw";
+export const MEMBER_EMAIL_COOKIE = "spoke_member_email";
 const SESSION_DAYS = 30;
 const MAGIC_MINUTES = 30;
 const NEW_HOST_PASSWORD_SECONDS = 120;
@@ -95,6 +96,31 @@ export async function consumeMagicLink(token: string): Promise<string | null> {
   if (!row || row.usedAt || row.expiresAt.getTime() < Date.now()) return null;
   await db.update(magicLinks).set({ usedAt: new Date() }).where(eq(magicLinks.id, row.id)).run();
   return row.email;
+}
+
+const MEMBER_EMAIL_SECONDS = 60 * 60 * 24 * 180;
+
+export async function getMemberEmail(): Promise<string | null> {
+  const jar = await cookies();
+  return normalizeEmail(jar.get(MEMBER_EMAIL_COOKIE)?.value);
+}
+
+export async function setMemberEmail(email: string) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return;
+  const jar = await cookies();
+  jar.set(MEMBER_EMAIL_COOKIE, normalized, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: MEMBER_EMAIL_SECONDS,
+  });
+}
+
+export async function clearMemberEmail() {
+  const jar = await cookies();
+  jar.set(MEMBER_EMAIL_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
 }
 
 export async function setGuestCookie(eventId: string, manageToken: string) {
