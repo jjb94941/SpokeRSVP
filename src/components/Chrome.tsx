@@ -2,17 +2,22 @@ import Image from "next/image";
 import Link from "next/link";
 import { logout } from "@/lib/actions/auth";
 import { getCurrentHost } from "@/lib/auth";
+import { isAdmin } from "@/lib/roles";
+import { appVersionLabel } from "@/lib/version";
 import { SpokeMark } from "./SpokeMark";
 
 export async function SiteHeader({
   hostName,
   variant = "public",
+  isAdminUser = false,
 }: {
   hostName?: string | null;
   variant?: "public" | "host";
+  isAdminUser?: boolean;
 }) {
   const sessionHost = variant === "public" ? await getCurrentHost() : null;
   const signedInName = hostName || sessionHost?.name;
+  const showAdminNav = isAdminUser || (sessionHost ? isAdmin(sessionHost) : false);
 
   return (
     <header className="bg-terracotta text-cream">
@@ -51,6 +56,14 @@ export async function SiteHeader({
               >
                 New event
               </Link>
+              {showAdminNav ? (
+                <Link
+                  href="/host/admins"
+                  className="rounded-lg px-3 py-2 font-semibold underline-offset-4 hover:underline"
+                >
+                  Manage hosts
+                </Link>
+              ) : null}
               <form action={logout}>
                 <button type="submit" className="rounded-lg px-3 py-2 font-semibold underline-offset-4 hover:underline">
                   Sign out{signedInName ? ` (${signedInName.split(" ")[0]})` : ""}
@@ -74,10 +87,14 @@ export async function SiteHeader({
 }
 
 export function SiteFooter() {
+  const version = appVersionLabel();
   return (
     <footer className="mt-auto border-t border-card-border bg-sand">
       <div className="mx-auto max-w-5xl px-5 py-8 text-[17px] leading-relaxed text-muted">
-        <p className="font-semibold">Marin Villages</p>
+        <p className="text-[17px] font-bold text-ink" aria-label={version}>
+          {version}
+        </p>
+        <p className="mt-3 font-semibold text-ink">Marin Villages</p>
         <p className="mt-2">
           SpokeRSVP is a lightweight RSVP, waitlist, and carpool tool. It complements Helpful Village — it is
           not a CRM and it does not match volunteers.

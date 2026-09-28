@@ -122,6 +122,7 @@ export async function ensureSchema(client?: Client) {
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'admin',
       created_at INTEGER NOT NULL
     );
 
@@ -182,4 +183,24 @@ export async function ensureSchema(client?: Client) {
     CREATE INDEX IF NOT EXISTS rsvps_event_id_idx ON rsvps(event_id);
     CREATE INDEX IF NOT EXISTS rsvps_event_status_idx ON rsvps(event_id, status);
   `);
+  await ensureHostRoleColumn(target);
+}
+
+function columnName(row: Record<string, unknown>): string {
+  const named = row.name;
+  if (named != null) return String(named);
+  const byIndex = row[1];
+  return byIndex == null ? "" : String(byIndex);
+}
+
+/** ALTER-safe for existing SQLite/Turso databases created before `hosts.role`. */
+async function ensureHostRoleColumn(client: Client) {
+  const info = await client.execute("PRAGMA table_info(hosts)");
+  const hasRole = info.rows.some((row) => columnName(row as Record<string, unknown>) === "role");
+  if (!hasRole) {
+    await client.execute("ALTER TABLE hosts ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'");
+  }
+  await client.execute(
+    "UPDATE hosts SET role = 'admin' WHERE role IS NULL OR role NOT IN ('admin', 'sub_admin')",
+  );
 }

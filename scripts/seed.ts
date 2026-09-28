@@ -11,6 +11,8 @@ config();
 
 const DEMO_EMAIL = "chair@millvalleyvillage.org";
 const DEMO_PASSWORD = "millvalley";
+const SUB_ADMIN_EMAIL = "volunteer@millvalleyvillage.org";
+const SUB_ADMIN_PASSWORD = "millvalley";
 
 function at(date: string, time: string) {
   return pacificWallToUtc(date, time);
@@ -61,6 +63,20 @@ async function main() {
       email: DEMO_EMAIL,
       passwordHash: bcrypt.hashSync(DEMO_PASSWORD, 10),
       name: "Mill Valley Village Chair",
+      role: "admin",
+      createdAt: now,
+    })
+    .run();
+
+  const volunteerId = newId();
+  await db
+    .insert(hosts)
+    .values({
+      id: volunteerId,
+      email: SUB_ADMIN_EMAIL,
+      passwordHash: bcrypt.hashSync(SUB_ADMIN_PASSWORD, 10),
+      name: "Mill Valley Volunteer Host",
+      role: "sub_admin",
       createdAt: now,
     })
     .run();
@@ -117,6 +133,23 @@ async function main() {
         locationName: "Mill Valley Library, conference room",
         streetAddress: "375 Throckmorton Ave, Mill Valley, CA",
         capacity: 8,
+        carpoolsEnabled: false,
+        status: "published",
+        shareToken: newShareToken(),
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: newId(),
+        hostId: volunteerId,
+        title: "Saturday stretch & chat",
+        description:
+          "Gentle stretching in the park, then a short sit-down conversation. Hosted by a volunteer so chairs can see how sub-administrator events look.",
+        startsAt: at("2026-09-19", "09:30"),
+        endsAt: at("2026-09-19", "10:30"),
+        locationName: "Boyle Park lawn",
+        streetAddress: null,
+        capacity: 16,
         carpoolsEnabled: false,
         status: "published",
         shareToken: newShareToken(),
@@ -194,9 +227,15 @@ async function main() {
   console.log("Seeded Mill Valley Village demo data.");
   console.log(`Database: ${url.startsWith("file:") ? url : "Turso / remote libSQL"}`);
   console.log("");
-  console.log("Demo host (local / development only — change this password before production):");
+  console.log("Demo administrator (local / development only — change this password before production):");
   console.log(`  Email:    ${DEMO_EMAIL}`);
   console.log(`  Password: ${DEMO_PASSWORD}`);
+  console.log("  Role:     administrator (can manage every event and appoint hosts)");
+  console.log("");
+  console.log("Demo sub-administrator:");
+  console.log(`  Email:    ${SUB_ADMIN_EMAIL}`);
+  console.log(`  Password: ${SUB_ADMIN_PASSWORD}`);
+  console.log("  Role:     sub-administrator (can manage only events they created)");
   console.log("");
   console.log("Guest RSVP links:");
   console.log(`  Walkers:  /e/${hike?.shareToken}`);

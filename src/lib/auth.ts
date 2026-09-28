@@ -9,8 +9,10 @@ import { normalizeEmail } from "./format";
 
 export const SESSION_COOKIE = "spoke_session";
 export const GUEST_COOKIE_PREFIX = "spoke_guest_";
+export const NEW_HOST_PASSWORD_COOKIE = "spoke_new_host_pw";
 const SESSION_DAYS = 30;
 const MAGIC_MINUTES = 30;
+const NEW_HOST_PASSWORD_SECONDS = 120;
 
 export async function getCurrentHost(): Promise<Host | null> {
   const jar = await cookies();
@@ -109,6 +111,22 @@ export async function setGuestCookie(eventId: string, manageToken: string) {
 export async function getGuestManageToken(eventId: string): Promise<string | undefined> {
   const jar = await cookies();
   return jar.get(`${GUEST_COOKIE_PREFIX}${eventId}`)?.value;
+}
+
+export async function setNewHostPasswordFlash(password: string) {
+  const jar = await cookies();
+  jar.set(NEW_HOST_PASSWORD_COOKIE, password, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/host/admins",
+    maxAge: NEW_HOST_PASSWORD_SECONDS,
+  });
+}
+
+export async function readNewHostPasswordFlash(): Promise<string | null> {
+  const jar = await cookies();
+  return jar.get(NEW_HOST_PASSWORD_COOKIE)?.value || null;
 }
 
 export async function appUrl(): Promise<string> {

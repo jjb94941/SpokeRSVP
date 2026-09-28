@@ -1,12 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, eq } from "drizzle-orm";
 import { EventForm } from "@/components/EventForm";
 import { Flash } from "@/components/Ui";
 import { updateEvent } from "@/lib/actions/events";
-import { requireHost } from "@/lib/auth";
-import { getDb } from "@/lib/db";
-import { events } from "@/lib/db/schema";
+import { findManagedEvent } from "@/lib/roles";
 
 export default async function EditEventPage({
   params,
@@ -15,16 +12,11 @@ export default async function EditEventPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
-  const host = await requireHost();
   const { id } = await params;
   const q = await searchParams;
-  const db = await getDb();
-  const event = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.id, id), eq(events.hostId, host.id)))
-    .get();
-  if (!event) notFound();
+  const managed = await findManagedEvent(id);
+  if (!managed) notFound();
+  const { event } = managed;
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
