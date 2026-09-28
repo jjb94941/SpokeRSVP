@@ -1,15 +1,20 @@
 import { Field, inputClass } from "./Ui";
 import type { EventRow } from "@/lib/db/schema";
 import { utcToPacificParts } from "@/lib/time";
+import { VILLAGES, type Village } from "@/lib/villages";
 
 export function EventForm({
   event,
   action,
   submitLabel,
+  chooseVillage = false,
+  defaultVillage = "Mill Valley",
 }: {
   event?: EventRow;
   action: (formData: FormData) => void | Promise<void>;
   submitLabel: string;
+  chooseVillage?: boolean;
+  defaultVillage?: Village | string;
 }) {
   const start = event ? utcToPacificParts(event.startsAt.getTime()) : { date: "", time: "10:00" };
   const end = event?.endsAt ? utcToPacificParts(event.endsAt.getTime()) : { date: "", time: "" };
@@ -17,6 +22,17 @@ export function EventForm({
   return (
     <form action={action} className="card max-w-2xl">
       {event ? <input type="hidden" name="id" value={event.id} /> : null}
+      {chooseVillage ? (
+        <Field label="Village" htmlFor="village" hint="This event is managed by hosts of this village only.">
+          <select id="village" name="village" required defaultValue={event?.village || defaultVillage} className={inputClass}>
+            {VILLAGES.map((village) => (
+              <option key={village} value={village}>
+                {village}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
       <Field label="Event title" htmlFor="title">
         <input
           id="title"

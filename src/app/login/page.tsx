@@ -39,9 +39,9 @@ export default async function LoginPage({
             public website.
           </p>
           <p className="mt-3 text-lg">
-            Administrator: <strong>chair@millvalleyvillage.org</strong> / <strong>millvalley</strong>
+            Super-administrator: <strong>chair@millvalleyvillage.org</strong> / <strong>millvalley</strong>
             <br />
-            Sub-administrator: <strong>volunteer@millvalleyvillage.org</strong> / <strong>millvalley</strong>
+            Mill Valley host: <strong>volunteer@millvalleyvillage.org</strong> / <strong>millvalley</strong>
           </p>
         </section>
 

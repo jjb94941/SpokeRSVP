@@ -9,6 +9,8 @@ export const hosts = sqliteTable("hosts", {
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
   role: text("role", { enum: HOST_ROLES }).notNull().default("admin"),
+  /** Null for super-administrators. Village hosts belong to exactly one community. */
+  village: text("village"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });
 
@@ -33,6 +35,7 @@ export const events = sqliteTable("events", {
   hostId: text("host_id")
     .notNull()
     .references(() => hosts.id, { onDelete: "cascade" }),
+  village: text("village").notNull().default("Mill Valley"),
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
   startsAt: integer("starts_at", { mode: "timestamp_ms" }).notNull(),

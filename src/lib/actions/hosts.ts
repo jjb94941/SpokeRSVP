@@ -16,6 +16,7 @@ import {
   isAdmin,
   parseNewSubAdmin,
 } from "@/lib/roles";
+import { isVillage, villageTitle } from "@/lib/villages";
 
 function formString(formData: FormData, key: string): string {
   return String(formData.get(key) || "").trim();
@@ -28,7 +29,7 @@ function adminsError(message: string): never {
 async function requireAdminActor() {
   const actor = await requireHost();
   if (!isAdmin(actor)) {
-    redirect("/host?error=" + encodeURIComponent("Only administrators can manage host accounts."));
+    redirect("/host?error=" + encodeURIComponent("Only super-administrators can manage host accounts."));
   }
   return actor;
 }
@@ -43,6 +44,7 @@ export async function createSubAdmin(formData: FormData) {
       name: formString(formData, "name"),
       email: formString(formData, "email"),
       password,
+      village: formString(formData, "village"),
     });
   } catch (error) {
     adminsError(error instanceof HostAdminError ? error.message : "Please check the form.");
@@ -62,6 +64,7 @@ export async function createSubAdmin(formData: FormData) {
       passwordHash: bcrypt.hashSync(parsed.password, 10),
       name: parsed.name,
       role: "sub_admin",
+      village: parsed.village,
       createdAt: new Date(),
     })
     .run();
@@ -70,12 +73,36 @@ export async function createSubAdmin(formData: FormData) {
   const loginUrl = `${await appUrl()}/login`;
   await sendEmail({
     to: parsed.email,
-    subject: "You were added as a SpokeRSVP sub-administrator",
-    text: subAdminWelcomeText({ name: parsed.name, loginUrl, appointedBy: actor.name }),
+    subject: `You were added as a SpokeRSVP host for ${villageTitle(parsed.village)}`,
+    text: subAdminWelcomeText({
+      name: parsed.name,
+      loginUrl,
+      appointedBy: actor.name,
+      villageTitle: villageTitle(parsed.village),
+    }),
   });
   redirect(
     "/host/admins?ok=" +
-      encodeURIComponent(`Sub-administrator ${parsed.name} was added. Share the temporary password shown below.`),
+      encodeURIComponent(
+        `${parsed.name} can now manage ${villageTitle(parsed.village)} events. Share the temporary password shown below.`,
+      ),
+  );
+}
+
+export async function setHostVillage(formData: FormData) {
+  await requireAdminActor();
+  const targetId = formString(formData, "hostId");
+  const village = formString(formData, "village");
+  if (!isVillage(village)) adminsError("Choose one village for this host.");
+  const db = await getDb();
+  const target = await db.select().from(hosts).where(eq(hosts.id, targetId)).get();
+  if (!target) adminsError("That host account was not found.");
+  if (isAdmin(target)) {
+    adminsError("Super-administrators are not assigned to a single village.");
+  }
+  await db.update(hosts).set({ village }).where(eq(hosts.id, target.id)).run();
+  redirect(
+    "/host/admins?ok=" + encodeURIComponent(`${target.name} now manages ${villageTitle(village)}.`),
   );
 }
 
@@ -83,6 +110,7 @@ export async function setHostRole(formData: FormData) {
   const actor = await requireAdminActor();
   const targetId = formString(formData, "hostId");
   const nextRole = formString(formData, "role");
+  const village = formString(formData, "village");
   const db = await getDb();
   const allHosts = await db.select().from(hosts).all();
   const target = allHosts.find((row) => row.id === targetId);
@@ -92,13 +120,20 @@ export async function setHostRole(formData: FormData) {
   } catch (error) {
     adminsError(error instanceof HostAdminError ? error.message : "That role change is not allowed.");
   }
+  if (nextRole === "sub_admin" && !isVillage(village)) {
+    adminsError("Choose one village before assigning this host.");
+  }
   await db
     .update(hosts)
-    .set({ role: nextRole as "admin" | "sub_admin" })
+    .set({
+      role: nextRole as "admin" | "sub_admin",
+      village: nextRole === "admin" ? null : village,
+    })
     .where(eq(hosts.id, target.id))
     .run();
-  const label = nextRole === "admin" ? "administrator" : "sub-administrator";
-  redirect("/host/admins?ok=" + encodeURIComponent(`${target.name} is now a ${label}.`));
+  const label =
+    nextRole === "admin" ? "a super-administrator" : `a host for ${villageTitle(village)}`;
+  redirect("/host/admins?ok=" + encodeURIComponent(`${target.name} is now ${label}.`));
 }
 
 export async function removeHost(formData: FormData) {

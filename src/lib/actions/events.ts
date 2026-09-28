@@ -7,7 +7,8 @@ import { appUrl, requireHost } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events } from "@/lib/db/schema";
 import { newId, newShareToken } from "@/lib/ids";
-import { findManagedEvent } from "@/lib/roles";
+import { findManagedEvent, isAdmin } from "@/lib/roles";
+import { isVillage } from "@/lib/villages";
 import { pacificWallToUtc } from "@/lib/time";
 import { promoteRsvp } from "@/lib/rsvp-service";
 
@@ -63,6 +64,16 @@ export async function createEvent(formData: FormData) {
   } catch (error) {
     redirect("/host/events/new?error=" + encodeURIComponent((error as Error).message));
   }
+  const requestedVillage = String(formData.get("village") || "").trim();
+  const village = isAdmin(host) ? requestedVillage : host.village;
+  if (!isVillage(village)) {
+    redirect(
+      "/host/events/new?error=" +
+        encodeURIComponent(
+          isAdmin(host) ? "Choose which village this event is for." : "Your account is not assigned to a village.",
+        ),
+    );
+  }
   const now = new Date();
   const id = newId();
   const db = await getDb();
@@ -71,6 +82,7 @@ export async function createEvent(formData: FormData) {
     .values({
       id,
       hostId: host.id,
+      village,
       shareToken: newShareToken(),
       status: "published",
       createdAt: now,
@@ -91,10 +103,18 @@ export async function updateEvent(formData: FormData) {
   } catch (error) {
     redirect(`/host/events/${id}/edit?error=` + encodeURIComponent((error as Error).message));
   }
+  let village = managed.event.village;
+  if (isAdmin(managed.host)) {
+    const requested = String(formData.get("village") || "").trim();
+    if (!isVillage(requested)) {
+      redirect(`/host/events/${id}/edit?error=` + encodeURIComponent("Choose which village this event is for."));
+    }
+    village = requested;
+  }
   const db = await getDb();
   await db
     .update(events)
-    .set({ ...values, updatedAt: new Date() })
+    .set({ ...values, village, updatedAt: new Date() })
     .where(eq(events.id, id))
     .run();
   redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event updated."));

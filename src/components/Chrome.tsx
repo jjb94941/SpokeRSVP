@@ -10,10 +10,12 @@ export async function SiteHeader({
   hostName,
   variant = "public",
   isAdminUser = false,
+  villageLabel,
 }: {
   hostName?: string | null;
   variant?: "public" | "host";
   isAdminUser?: boolean;
+  villageLabel?: string | null;
 }) {
   const sessionHost = variant === "public" ? await getCurrentHost() : null;
   const signedInName = hostName || sessionHost?.name;
@@ -38,7 +40,7 @@ export async function SiteHeader({
           <SpokeMark className="h-11 w-11 shrink-0" />
           <span>
             <span className="font-display block text-2xl leading-none font-semibold">SpokeRSVP</span>
-            <span className="mt-1 block text-base tracking-wide">Marin Villages</span>
+            <span className="mt-1 block text-base tracking-wide">{villageLabel || "Marin Villages"}</span>
           </span>
         </Link>
         <nav className="flex flex-wrap items-center gap-3 text-lg">

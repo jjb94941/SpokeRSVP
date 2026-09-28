@@ -4,6 +4,7 @@ import { requireHost } from "./auth";
 import { getDb } from "./db";
 import { events, HOST_ROLES, type EventRow, type Host, type HostRole } from "./db/schema";
 import { normalizeEmail } from "./format";
+import { isVillage, type Village } from "./villages";
 
 export { HOST_ROLES, type HostRole };
 
@@ -23,20 +24,21 @@ export function isAdmin(host: Pick<Host, "role">): boolean {
 }
 
 export function canManageEvent(
-  host: Pick<Host, "id" | "role">,
-  event: Pick<EventRow, "hostId">,
+  host: Pick<Host, "role" | "village">,
+  event: Pick<EventRow, "village">,
 ): boolean {
-  return isAdmin(host) || event.hostId === host.id;
+  if (isAdmin(host)) return true;
+  return Boolean(host.village) && host.village === event.village;
 }
 
 export function roleLabel(role: string | null | undefined): string {
-  return normalizeHostRole(role) === "admin" ? "Administrator" : "Sub-administrator";
+  return normalizeHostRole(role) === "admin" ? "Super-administrator" : "Village host";
 }
 
 export async function requireAdmin(): Promise<Host> {
   const host = await requireHost();
   if (!isAdmin(host)) {
-    redirect("/host?error=" + encodeURIComponent("Only administrators can manage host accounts."));
+    redirect("/host?error=" + encodeURIComponent("Only super-administrators can manage host accounts."));
   }
   return host;
 }
@@ -54,7 +56,7 @@ export async function findManagedEvent(
 
 export function assertAdminActor(actor: Pick<Host, "role">) {
   if (!isAdmin(actor)) {
-    throw new HostAdminError("Only administrators can manage host accounts.");
+    throw new HostAdminError("Only super-administrators can manage host accounts.");
   }
 }
 
@@ -73,10 +75,10 @@ export function assertCanSetRole(
     throw new HostAdminError("That role is not valid.");
   }
   if (target.id === actor.id && nextRole !== "admin") {
-    throw new HostAdminError("You cannot change your own administrator role.");
+    throw new HostAdminError("You cannot change your own super-administrator role.");
   }
   if (isAdmin(target) && nextRole !== "admin" && adminCount <= 1) {
-    throw new HostAdminError("There must be at least one administrator.");
+    throw new HostAdminError("There must be at least one super-administrator.");
   }
 }
 
@@ -90,14 +92,20 @@ export function assertCanRemoveHost(
     throw new HostAdminError("You cannot remove your own account.");
   }
   if (isAdmin(target) && adminCount <= 1) {
-    throw new HostAdminError("There must be at least one administrator.");
+    throw new HostAdminError("There must be at least one super-administrator.");
   }
 }
 
-export function parseNewSubAdmin(input: { name: string; email: string; password: string }): {
+export function parseNewSubAdmin(input: {
   name: string;
   email: string;
   password: string;
+  village: string;
+}): {
+  name: string;
+  email: string;
+  password: string;
+  village: Village;
 } {
   const name = input.name.trim();
   const email = normalizeEmail(input.email) || "";
@@ -111,5 +119,8 @@ export function parseNewSubAdmin(input: { name: string; email: string; password:
   if (password.length < 8) {
     throw new HostAdminError("Temporary password must be at least 8 characters.");
   }
-  return { name, email, password };
+  if (!isVillage(input.village)) {
+    throw new HostAdminError("Choose one village for this host.");
+  }
+  return { name, email, password, village: input.village };
 }

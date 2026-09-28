@@ -7,6 +7,7 @@ import { events, hosts } from "@/lib/db/schema";
 import { isAdmin, roleLabel } from "@/lib/roles";
 import { getEventCounts } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
+import { villageTitle } from "@/lib/villages";
 
 export default async function HostHome({
   searchParams,
@@ -24,11 +25,10 @@ export default async function HostHome({
     })
     .from(events)
     .innerJoin(hosts, eq(events.hostId, hosts.id));
-  const rows = (
-    admin
-      ? await listedQuery.orderBy(desc(events.startsAt)).all()
-      : await listedQuery.where(eq(events.hostId, host.id)).orderBy(desc(events.startsAt)).all()
-  ).sort((a, b) => {
+  const scoped = admin
+    ? listedQuery
+    : listedQuery.where(eq(events.village, host.village || ""));
+  const rows = (await scoped.orderBy(desc(events.startsAt)).all()).sort((a, b) => {
     if (a.event.status !== b.event.status) return a.event.status === "cancelled" ? 1 : -1;
     return a.event.startsAt.getTime() - b.event.startsAt.getTime();
   });
@@ -45,12 +45,14 @@ export default async function HostHome({
             Signed in as {host.email} · {roleLabel(host.role)}
           </p>
           <h1 className="font-display mt-1 text-[32px] leading-tight font-bold">
-            {admin ? "All village events" : "Your events"}
+            {admin ? "All village events" : host.village ? `${villageTitle(host.village)} events` : "Your events"}
           </h1>
           <p className="mt-2 max-w-2xl text-[17px] text-ink">
             {admin
-              ? "As an administrator you can view and manage every event, including ones created by sub-administrators."
-              : "You can create events and manage the ones you created. Other hosts’ events stay with them."}
+              ? "As a super-administrator you can view and manage events in every Marin Villages community, and appoint a host for each village."
+              : host.village
+                ? `You can view and manage every event for ${villageTitle(host.village)}. Other villages stay with their own hosts.`
+                : "Your account is not assigned to a village yet. Ask a super-administrator to assign one."}
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -80,11 +82,10 @@ export default async function HostHome({
                   {formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}
                 </p>
                 <p className="meta-line">{event.locationName}</p>
-                {admin ? (
-                  <p className="meta-line">
-                    Created by {event.hostId === host.id ? "you" : creatorName}
-                  </p>
-                ) : null}
+                {admin ? <p className="meta-line">{villageTitle(event.village)}</p> : null}
+                <p className="meta-line">
+                  Created by {event.hostId === host.id ? "you" : creatorName}
+                </p>
                 <p className="status-line mt-2.5">
                   {counts.going} going · {counts.waitlist} waitlist · {counts.notGoing} not going · capacity{" "}
                   {event.capacity}

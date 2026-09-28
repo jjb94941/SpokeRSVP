@@ -65,6 +65,7 @@ async function rsvpFlow() {
       capacity: 2,
       carpoolsEnabled: true,
       status: "published",
+      village: "Mill Valley",
       shareToken,
       createdAt: now,
       updatedAt: now,
@@ -131,25 +132,27 @@ async function rsvpFlow() {
 }
 
 function hostRolePolicies() {
-  const admin = { id: "a1", role: "admin" as const };
-  const otherAdmin = { id: "a2", role: "admin" as const };
-  const sub = { id: "s1", role: "sub_admin" as const };
+  const admin = { id: "a1", role: "admin" as const, village: null };
+  const otherAdmin = { id: "a2", role: "admin" as const, village: null };
+  const sub = { id: "s1", role: "sub_admin" as const, village: "Mill Valley" };
+  const tiburon = { id: "t1", role: "sub_admin" as const, village: "Tiburon" };
   assert.equal(isAdmin(admin), true);
   assert.equal(isAdmin(sub), false);
-  assert.equal(canManageEvent(admin, { hostId: "s1" }), true);
-  assert.equal(canManageEvent(sub, { hostId: "s1" }), true);
-  assert.equal(canManageEvent(sub, { hostId: "a1" }), false);
+  assert.equal(canManageEvent(admin, { village: "Tiburon" }), true);
+  assert.equal(canManageEvent(sub, { village: "Mill Valley" }), true);
+  assert.equal(canManageEvent(sub, { village: "Tiburon" }), false);
+  assert.equal(canManageEvent(tiburon, { village: "Mill Valley" }), false);
 
   assert.throws(() => assertCanSetRole(sub, admin, "sub_admin", 1), HostAdminError);
-  assert.throws(() => assertCanSetRole(admin, admin, "sub_admin", 2), /own administrator role/);
-  assert.throws(() => assertCanSetRole(admin, admin, "sub_admin", 1), /own administrator role/);
-  assert.throws(() => assertCanSetRole(otherAdmin, admin, "sub_admin", 1), /at least one administrator/);
+  assert.throws(() => assertCanSetRole(admin, admin, "sub_admin", 2), /own super-administrator role/);
+  assert.throws(() => assertCanSetRole(admin, admin, "sub_admin", 1), /own super-administrator role/);
+  assert.throws(() => assertCanSetRole(otherAdmin, admin, "sub_admin", 1), /at least one super-administrator/);
   assertCanSetRole(otherAdmin, admin, "sub_admin", 2);
   assertCanSetRole(admin, sub, "admin", 1);
 
   assert.throws(() => assertCanRemoveHost(sub, admin, 1), HostAdminError);
   assert.throws(() => assertCanRemoveHost(admin, admin, 2), /own account/);
-  assert.throws(() => assertCanRemoveHost(otherAdmin, admin, 1), /at least one administrator/);
+  assert.throws(() => assertCanRemoveHost(otherAdmin, admin, 1), /at least one super-administrator/);
   assertCanRemoveHost(admin, sub, 1);
   assertCanRemoveHost(otherAdmin, admin, 2);
   assert.equal(countAdmins([admin, sub, otherAdmin]), 2);
@@ -158,9 +161,18 @@ function hostRolePolicies() {
     name: "Pat Neighbor",
     email: "  Pat@MillValleyVillage.org ",
     password: "temporary1",
+    village: "Novato",
   });
   assert.equal(parsed.email, "pat@millvalleyvillage.org");
-  assert.throws(() => parseNewSubAdmin({ name: "Pat", email: "pat@example.com", password: "short" }), /at least 8/);
+  assert.equal(parsed.village, "Novato");
+  assert.throws(
+    () => parseNewSubAdmin({ name: "Pat", email: "pat@example.com", password: "short", village: "Novato" }),
+    /at least 8/,
+  );
+  assert.throws(
+    () => parseNewSubAdmin({ name: "Pat", email: "pat@example.com", password: "temporary1", village: "Sausalito" }),
+    /one village/,
+  );
 }
 
 async function hostRoleMigration() {
@@ -192,9 +204,11 @@ async function hostRoleMigration() {
   const info = await migrated.execute("PRAGMA table_info(hosts)");
   const names = info.rows.map((row) => String((row as Record<string, unknown>).name ?? row[1]));
   assert.ok(names.includes("role"), "ensureSchema should add hosts.role on existing databases");
+  assert.ok(names.includes("village"), "ensureSchema should add hosts.village on existing databases");
   const db = await getDb();
   const legacy = await db.select().from(hosts).where(eq(hosts.email, "legacy@example.com")).get();
   assert.equal(legacy?.role, "admin");
+  assert.equal(legacy?.village ?? null, null);
   closeDb();
   fs.rmSync(dir, { recursive: true, force: true });
 }

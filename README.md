@@ -63,11 +63,11 @@ Never commit `.env` or real tokens.
 
 Seeded by `npm run db:seed`. **Do not use these credentials on a public website. Change these passwords before any production deploy.**
 
-| | Administrator | Sub-administrator |
+| | Super-administrator | Mill Valley host |
 | --- | --- | --- |
 | Email | `chair@millvalleyvillage.org` | `volunteer@millvalleyvillage.org` |
 | Password | `millvalley` | `millvalley` |
-| Can manage | All events, and host roles | Only events they created |
+| Can manage | Every village, and host accounts | All Mill Valley events only |
 
 Sign in at `/login`. You can also request a magic-link email; without a Resend key the link is printed on the login page and in the server log.
 
@@ -119,7 +119,7 @@ You can also run reminders manually: `POST` or `GET` `/api/reminders` with `Auth
 
 ## What the MVP does
 
-- **Hosts** sign in with email/password or a magic link. **Administrators** can view, edit, cancel, export, and manage RSVPs/waitlists/carpools for **every** event, create events, and appoint or remove sub-administrators at `/host/admins`. **Sub-administrators** can create events and manage **only** the events they created. They cannot change anyone’s role. Existing hosts default to administrator when the `hosts.role` column is added.
+- **Hosts** sign in with email/password or a magic link. **Super-administrators** can view and manage events in every Marin Villages community and appoint village hosts at `/host/admins`. **Village hosts** are assigned to one of Tiburon, Mill Valley, Novato, San Rafael, Twin Cities, or Ross Valley, and can manage every event for that village only. Existing events stay Mill Valley when the village column is added.
 - **Guests** open `/e/<token>` with **no account**. They RSVP with name plus phone **or** email: Going, not going, or waitlist when the event is full. Changing from Going to not going **auto-promotes** the next waitlisted neighbor.
 - **Carpools** (when enabled): offer seats or need a ride. Visible to Going guests (first names) and the host (full contact).
 - **Email**: confirmation, waitlist promotion, and reminders go through [Resend](https://resend.com) when `RESEND_API_KEY` is set. Otherwise they are **logged** (local stub). Magic links work the same way.
@@ -127,32 +127,32 @@ You can also run reminders manually: `POST` or `GET` `/api/reminders` with `Auth
 
 ## Host roles
 
-- **Administrator** — complete control over every event (view, edit, cancel, RSVP/waitlist/carpool management, CSV export), can create events, and can appoint, promote, demote, or remove hosts at `/host/admins`.
-- **Sub-administrator** — can create events and manage only events they created. They cannot open other people’s dashboards and cannot change anyone’s role.
+- **Super-administrator** — every event in every village, plus appoint, reassign, promote, or remove hosts at `/host/admins`. Not tied to one village. The host header stays “Marin Villages”.
+- **Village host** — one village. They can view and manage every event for that village, including events another host in the same village created. The header shows that village, for example “Mill Valley Village”.
 
-Existing production hosts are treated as administrators: `ensureSchema` adds `hosts.role` with `DEFAULT 'admin'` (ALTER-safe on SQLite/Turso).
+Villages: Tiburon, Mill Valley, Novato, San Rafael, Twin Cities, Ross Valley. Existing events and village hosts default to Mill Valley (`ensureSchema` adds `events.village` and `hosts.village`, ALTER-safe on SQLite/Turso).
 
 ### Local test (before any production deploy)
 
 ```bash
-git fetch && git checkout cursor/admin-sub-admin-roles-5ebd
+git fetch && git checkout cursor/village-warm-host-b975
 cp .env.example .env  # use file:./data/spoke.db for local
 npm install && npm run db:reset && npm run dev
 ```
 
 Then open [http://localhost:3000](http://localhost:3000).
 
-**As administrator** — sign in as `chair@millvalleyvillage.org` / `millvalley`:
+**As super-administrator** — sign in as `chair@millvalleyvillage.org` / `millvalley`:
 
-1. Host home should list **all** events, including **Saturday stretch & chat** (created by the volunteer). **Manage hosts** should appear in the header.
-2. Open **Manage hosts** (`/host/admins`). Appoint a sub-administrator: name, email, and an optional temporary password (leave blank to generate one). The password is shown once on that page — share it with the new host. They can also use “email me a sign-in link”.
-3. Confirm you cannot remove or demote the last administrator (yourself).
+1. The header says **Marin Villages**. Host home lists events from every village, including Mill Valley ones. **Manage hosts** is in the header.
+2. Open **Manage hosts**. Appoint a host: name, email, **one village** (try Tiburon), and an optional temporary password. The password is shown once.
+3. Confirm you cannot remove or demote the last super-administrator (yourself).
 
-**As sub-administrator** — sign out, then sign in as `volunteer@millvalleyvillage.org` / `millvalley` (or the host you just appointed):
+**As a village host** — sign out, then sign in as `volunteer@millvalleyvillage.org` / `millvalley`:
 
-1. Host home should show **only** events that person created. Chair-owned events (walkers, coffee, book club) must not appear.
-2. **Manage hosts** should be hidden. Opening `/host/admins` should send you back to host home.
-3. Paste a chair-owned event dashboard URL (from the admin session). It should 404. Edit and CSV export for that event should also 404.
+1. The header says **Mill Valley Village**. The list includes every Mill Valley event (walkers, coffee, book club, and the stretch class), not only events this person created.
+2. **Manage hosts** is hidden. Opening `/host/admins` returns to host home.
+3. A Tiburon event created by the super-administrator, or by the Tiburon host, does not appear. Its dashboard URL 404s.
 
 Confirm the footer on public and host pages reads **Ver. 2.0 · September 15, 2026**.
 

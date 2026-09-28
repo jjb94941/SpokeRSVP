@@ -11,6 +11,7 @@ import { firstName, formatPhoneDisplay } from "@/lib/format";
 import { findManagedEvent, isAdmin } from "@/lib/roles";
 import { getEventCounts, listRsvps, type RsvpListRow } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
+import { villageTitle } from "@/lib/villages";
 
 export default async function HostEventPage({
   params,
@@ -50,6 +51,7 @@ export default async function HostEventPage({
       <h1 className="font-display text-[32px] leading-tight font-bold">{event.title}</h1>
       <p className="meta-line mt-2">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
       <p className="meta-line mt-1">{event.locationName}</p>
+      <p className="meta-line mt-1">{villageTitle(event.village)}</p>
       {isAdmin(host) && creator ? (
         <p className="meta-line mt-1">
           Created by {event.hostId === host.id ? "you" : `${creator.name} (${creator.email})`}

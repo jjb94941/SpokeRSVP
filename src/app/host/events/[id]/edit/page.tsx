@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { EventForm } from "@/components/EventForm";
 import { Flash } from "@/components/Ui";
 import { updateEvent } from "@/lib/actions/events";
-import { findManagedEvent } from "@/lib/roles";
+import { findManagedEvent, isAdmin } from "@/lib/roles";
 
 export default async function EditEventPage({
   params,
@@ -16,7 +16,7 @@ export default async function EditEventPage({
   const q = await searchParams;
   const managed = await findManagedEvent(id);
   if (!managed) notFound();
-  const { event } = managed;
+  const { host, event } = managed;
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
@@ -27,7 +27,13 @@ export default async function EditEventPage({
       </p>
       <h1 className="font-display mb-6 text-[32px] leading-tight font-bold">Edit event</h1>
       <Flash error={q.error} />
-      <EventForm event={event} action={updateEvent} submitLabel="Save changes" />
+      <EventForm
+        event={event}
+        action={updateEvent}
+        submitLabel="Save changes"
+        chooseVillage={isAdmin(host)}
+        defaultVillage={event.village}
+      />
     </main>
   );
 }

@@ -123,6 +123,7 @@ export async function ensureSchema(client?: Client) {
       password_hash TEXT NOT NULL,
       name TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'admin',
+      village TEXT,
       created_at INTEGER NOT NULL
     );
 
@@ -143,6 +144,7 @@ export async function ensureSchema(client?: Client) {
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
       host_id TEXT NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+      village TEXT NOT NULL DEFAULT 'Mill Valley',
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       starts_at INTEGER NOT NULL,
@@ -184,6 +186,7 @@ export async function ensureSchema(client?: Client) {
     CREATE INDEX IF NOT EXISTS rsvps_event_status_idx ON rsvps(event_id, status);
   `);
   await ensureHostRoleColumn(target);
+  await ensureVillageColumns(target);
 }
 
 function columnName(row: Record<string, unknown>): string {
@@ -202,5 +205,24 @@ async function ensureHostRoleColumn(client: Client) {
   }
   await client.execute(
     "UPDATE hosts SET role = 'admin' WHERE role IS NULL OR role NOT IN ('admin', 'sub_admin')",
+  );
+}
+
+/** Existing Mill Valley data stays Mill Valley. Village hosts without a village get that default. */
+async function ensureVillageColumns(client: Client) {
+  const hostInfo = await client.execute("PRAGMA table_info(hosts)");
+  if (!hostInfo.rows.some((row) => columnName(row as Record<string, unknown>) === "village")) {
+    await client.execute("ALTER TABLE hosts ADD COLUMN village TEXT");
+  }
+  const eventInfo = await client.execute("PRAGMA table_info(events)");
+  if (!eventInfo.rows.some((row) => columnName(row as Record<string, unknown>) === "village")) {
+    await client.execute("ALTER TABLE events ADD COLUMN village TEXT NOT NULL DEFAULT 'Mill Valley'");
+  }
+  const allowed = "'Tiburon', 'Mill Valley', 'Novato', 'San Rafael', 'Twin Cities', 'Ross Valley'";
+  await client.execute(
+    `UPDATE events SET village = 'Mill Valley' WHERE village IS NULL OR village NOT IN (${allowed})`,
+  );
+  await client.execute(
+    `UPDATE hosts SET village = 'Mill Valley' WHERE role = 'sub_admin' AND (village IS NULL OR village NOT IN (${allowed}))`,
   );
 }
