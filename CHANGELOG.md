@@ -6,6 +6,8 @@ Product versions use `Ver. XX.YY` plus a human-readable date. Bump both `number`
 
 Village hosts belong to one Marin Villages community (Tiburon, Mill Valley, Novato, San Rafael, Twin Cities, or Ross Valley) and manage that village’s events only. Super-administrators assign the village and still see every community. Existing events stay Mill Valley.
 
+Members sign up from the public events list with email only. After they are signed up or waitlisted, the same card has **Cancel signup** or **Leave the waitlist**. Cancelling a Going RSVP still promotes the next waitlisted neighbor.
+
 ## Ver. 2.0 · September 15, 2026
 
 Administrator and sub-administrator host roles.

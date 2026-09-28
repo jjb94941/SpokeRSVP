@@ -89,3 +89,51 @@ export async function memberRsvp(formData: FormData) {
   const join = returnTo.includes("?") ? "&" : "?";
   redirect(`${returnTo}${join}ok=` + encodeURIComponent(thanks));
 }
+
+export async function memberCancelRsvp(formData: FormData) {
+  const returnTo = memberReturnPath(formData);
+  const email = await getMemberEmail();
+  if (!email) emailError(returnTo, "Enter your email above before you cancel. No password is needed.");
+
+  const eventId = String(formData.get("eventId") || "");
+  const db = await getDb();
+  const event = await db.select().from(events).where(eq(events.id, eventId)).get();
+  if (!event) emailError(returnTo, "That event could not be found.");
+
+  const existing = (await db.select().from(rsvps).where(eq(rsvps.eventId, event.id)).all()).find(
+    (row) => normalizeEmail(row.email) === email && row.status !== "not_going",
+  );
+  if (!existing) emailError(returnTo, "There is no signup to cancel for that event.");
+
+  let rsvp;
+  try {
+    ({ rsvp } = await submitRsvp(event, {
+      guestName: existing.guestName,
+      email,
+      phone: existing.phone,
+      desiredStatus: "not_going",
+      manageToken: existing.manageToken,
+    }));
+  } catch (error) {
+    emailError(returnTo, (error as Error).message);
+  }
+
+  const when = formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime());
+  await sendEmail({
+    to: email,
+    subject: `RSVP cancelled for ${event.title}`,
+    text: rsvpConfirmationText({
+      guestName: rsvp.guestName,
+      eventTitle: event.title,
+      when,
+      where: event.locationName,
+      status: rsvp.status,
+      manageUrl: returnTo,
+    }),
+  });
+
+  const join = returnTo.includes("?") ? "&" : "?";
+  redirect(
+    `${returnTo}${join}ok=` + encodeURIComponent(`${email} is no longer signed up for ${event.title}.`),
+  );
+}

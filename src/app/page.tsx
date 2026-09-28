@@ -2,7 +2,7 @@ import Link from "next/link";
 import { desc, inArray } from "drizzle-orm";
 import { SiteFooter, SiteHeader } from "@/components/Chrome";
 import { Flash } from "@/components/Ui";
-import { memberRsvp, signInMember, signOutMember } from "@/lib/actions/member";
+import { memberCancelRsvp, memberRsvp, signInMember, signOutMember } from "@/lib/actions/member";
 import { getMemberEmail } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events, rsvps } from "@/lib/db/schema";
@@ -48,7 +48,7 @@ export default async function HomePage({
         <p className="text-lg font-semibold tracking-wide text-teal">Marin Villages</p>
         <h1 className="font-display mt-2 max-w-3xl text-4xl leading-tight font-semibold">Village events</h1>
         <p className="mt-3 max-w-2xl text-[17px] text-ink">
-          See gatherings across the villages, or choose the ones you want. Sign up with your email. No password.
+          See gatherings across the villages, or choose the ones you want. Sign up with your email, and cancel the same way. No password.
         </p>
         <Flash ok={params.ok} error={params.error} />
 
@@ -126,10 +126,21 @@ export default async function HomePage({
                     {counts.going} going · {counts.spotsLeft} open {counts.spotsLeft === 1 ? "seat" : "seats"}
                     {counts.waitlist ? ` · ${counts.waitlist} waitlist` : ""}
                   </p>
-                  {rsvp?.status === "going" ? (
-                    <p className="status-line mt-4">You are signed up.</p>
-                  ) : rsvp?.status === "waitlist" ? (
-                    <p className="status-line mt-4">You are on the waitlist.</p>
+                  {rsvp && (rsvp.status === "going" || rsvp.status === "waitlist") ? (
+                    <div className="mt-4">
+                      <p className="status-line">
+                        {rsvp.status === "going" ? "You are signed up." : "You are on the waitlist."}
+                      </p>
+                      <form action={memberCancelRsvp} className="mt-4">
+                        <input type="hidden" name="returnTo" value={returnTo} />
+                        <input type="hidden" name="eventId" value={event.id} />
+                        <button type="submit" className="btn-secondary">
+                          {rsvp.status === "going"
+                            ? `Cancel signup for ${event.title}`
+                            : `Leave the waitlist for ${event.title}`}
+                        </button>
+                      </form>
+                    </div>
                   ) : (
                     <form action={memberRsvp} className="mt-4">
                       <input type="hidden" name="returnTo" value={returnTo} />

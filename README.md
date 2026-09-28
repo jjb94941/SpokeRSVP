@@ -121,6 +121,7 @@ You can also run reminders manually: `POST` or `GET` `/api/reminders` with `Auth
 
 - **Hosts** sign in with email/password or a magic link. **Super-administrators** can view and manage events in every Marin Villages community and appoint village hosts at `/host/admins`. **Village hosts** are assigned to one of Tiburon, Mill Valley, Novato, San Rafael, Twin Cities, or Ross Valley, and can manage every event for that village only. Existing events stay Mill Valley when the village column is added.
 - **Guests** open `/e/<token>` with **no account**. They RSVP with name plus phone **or** email: Going, not going, or waitlist when the event is full. Changing from Going to not going **auto-promotes** the next waitlisted neighbor.
+- **Members** use the public events page with email only (no password). They can filter by village, sign up, and cancel that signup or leave the waitlist from the same list. Cancelling a Going signup still promotes the next waitlisted neighbor.
 - **Carpools** (when enabled): offer seats or need a ride. Visible to Going guests (first names) and the host (full contact).
 - **Email**: confirmation, waitlist promotion, and reminders go through [Resend](https://resend.com) when `RESEND_API_KEY` is set. Otherwise they are **logged** (local stub). Magic links work the same way.
 - **SMS**: not implemented (`TODO` in `src/lib/notify.ts` and `npm run reminders`).
@@ -153,6 +154,12 @@ Then open [http://localhost:3000](http://localhost:3000).
 1. The header says **Mill Valley Village**. The list includes every Mill Valley event (walkers, coffee, book club, and the stretch class), not only events this person created.
 2. **Manage hosts** is hidden. Opening `/host/admins` returns to host home.
 3. A Tiburon event created by the super-administrator, or by the Tiburon host, does not appear. Its dashboard URL 404s.
+
+**As a member** — stay signed out of the host account and open [http://localhost:3000](http://localhost:3000):
+
+1. Enter an email and choose **Continue with email**. No password.
+2. Sign up for an event. That card says you are signed up and shows **Cancel signup**. A full event says you are on the waitlist and shows **Leave the waitlist**.
+3. Cancel. The card offers **Sign up** again, and a freed seat goes to the next person on the waitlist.
 
 Confirm the footer on public and host pages reads **Ver. 2.0 · September 15, 2026**.
 
