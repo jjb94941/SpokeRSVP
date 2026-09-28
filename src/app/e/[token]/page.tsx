@@ -56,7 +56,7 @@ export default async function PublicRsvpPage({
             This event has been cancelled.
           </p>
         ) : null}
-        <p className="text-lg font-semibold text-teal">Mill Valley Village</p>
+        <p className="text-lg font-semibold text-teal">Marin Villages</p>
         <h1 className="font-display mt-1 text-4xl sm:text-5xl">{event.title}</h1>
         <p className="mt-3 text-xl">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
         <p className="mt-2 text-xl">{event.locationName}</p>

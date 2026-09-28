@@ -19,7 +19,7 @@ export default async function HomePage() {
     <>
       <SiteHeader />
       <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
-        <p className="text-lg font-semibold tracking-wide text-teal">Mill Valley Village</p>
+        <p className="text-lg font-semibold tracking-wide text-teal">Marin Villages</p>
         <h1 className="font-display mt-2 max-w-3xl text-4xl leading-tight font-semibold sm:text-5xl">
           RSVP for village gatherings — waitlist and rides included.
         </h1>

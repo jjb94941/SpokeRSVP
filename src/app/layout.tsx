@@ -18,11 +18,11 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   title: {
-    default: "SpokeRSVP · Mill Valley Village",
+    default: "SpokeRSVP · Marin Villages",
     template: "%s · SpokeRSVP",
   },
   description:
-    "Local-village event RSVPs, waitlists, and optional carpools for Mill Valley Village. Complements Helpful Village — not a CRM.",
+    "Local-village event RSVPs, waitlists, and optional carpools for Marin Villages. Complements Helpful Village — not a CRM.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

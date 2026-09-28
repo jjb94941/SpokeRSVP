@@ -33,7 +33,7 @@ export async function SiteHeader({
           <SpokeMark className="h-11 w-11 shrink-0" />
           <span>
             <span className="font-display block text-2xl leading-none font-semibold">SpokeRSVP</span>
-            <span className="mt-1 block text-base tracking-wide">Mill Valley Village</span>
+            <span className="mt-1 block text-base tracking-wide">Marin Villages</span>
           </span>
         </Link>
         <nav className="flex flex-wrap items-center gap-3 text-lg">
@@ -77,7 +77,7 @@ export function SiteFooter() {
   return (
     <footer className="mt-auto border-t border-card-border bg-sand">
       <div className="mx-auto max-w-5xl px-5 py-8 text-[17px] leading-relaxed text-muted">
-        <p className="font-semibold">Mill Valley Village · Marin Villages pilot</p>
+        <p className="font-semibold">Marin Villages</p>
         <p className="mt-2">
           SpokeRSVP is a lightweight RSVP, waitlist, and carpool tool. It complements Helpful Village — it is
           not a CRM and it does not match volunteers.

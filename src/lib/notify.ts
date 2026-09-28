@@ -72,7 +72,7 @@ ${opts.where}
 Change your RSVP any time:
 ${opts.manageUrl}
 
-Mill Valley Village — SpokeRSVP
+Marin Villages — SpokeRSVP
 This is a local village pilot. Contact info is only shared with the event host.`;
 }
 
@@ -92,7 +92,7 @@ ${opts.when}
 Details and carpools:
 ${opts.manageUrl}
 
-Mill Valley Village — SpokeRSVP`;
+Marin Villages — SpokeRSVP`;
 }
 
 export function reminderText(opts: {
@@ -111,11 +111,11 @@ ${opts.where}
 
 ${opts.manageUrl}
 
-Mill Valley Village — SpokeRSVP`;
+Marin Villages — SpokeRSVP`;
 }
 
 export function magicLinkText(opts: { url: string }): string {
-  return `Sign in to SpokeRSVP (Mill Valley Village host dashboard):
+  return `Sign in to SpokeRSVP (Marin Villages host dashboard):
 
 ${opts.url}
 
