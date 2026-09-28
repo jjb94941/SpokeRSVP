@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { logout } from "@/lib/actions/auth";
 import { getCurrentHost } from "@/lib/auth";
@@ -17,7 +18,19 @@ export async function SiteHeader({
     <header className="bg-terracotta text-cream">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-5 py-4">
         <Link href={variant === "host" || sessionHost ? "/host" : "/"} className="flex items-center gap-3 text-cream">
-          <SpokeMark className="h-11 w-11" />
+          {variant === "host" ? (
+            <span className="inline-flex shrink-0 rounded-[10px] bg-cream p-1">
+              <Image
+                src="/marin-villages-logo.png"
+                alt="Marin Villages"
+                width={1090}
+                height={1836}
+                priority
+                className="h-32 w-auto"
+              />
+            </span>
+          ) : null}
+          <SpokeMark className="h-11 w-11 shrink-0" />
           <span>
             <span className="font-display block text-2xl leading-none font-semibold">SpokeRSVP</span>
             <span className="mt-1 block text-base tracking-wide">Mill Valley Village</span>
