@@ -30,7 +30,7 @@ export async function SiteHeader({
                 Public events
               </Link>
               <Link href="/host" className="rounded-lg px-3 py-2 font-semibold underline-offset-4 hover:underline">
-                Host home
+                All events
               </Link>
               <Link
                 href="/host/events/new"
@@ -62,8 +62,8 @@ export async function SiteHeader({
 
 export function SiteFooter() {
   return (
-    <footer className="mt-auto border-t border-sand-deep bg-sand/60">
-      <div className="mx-auto max-w-5xl px-5 py-8 text-base leading-relaxed text-ink/85">
+    <footer className="mt-auto border-t border-card-border bg-sand">
+      <div className="mx-auto max-w-5xl px-5 py-8 text-[17px] leading-relaxed text-muted">
         <p className="font-semibold">Mill Valley Village · Marin Villages pilot</p>
         <p className="mt-2">
           SpokeRSVP is a lightweight RSVP, waitlist, and carpool tool. It complements Helpful Village — it is

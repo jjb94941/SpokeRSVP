@@ -92,7 +92,7 @@ export function EventForm({
           className={inputClass}
         />
       </Field>
-      <div className="mb-8 rounded-2xl bg-sand px-4 py-4">
+      <div className="mb-8 rounded-[12px] border border-card-border bg-sand px-4 py-4">
         <label className="flex items-start gap-3 text-lg">
           <input
             type="checkbox"
@@ -102,7 +102,7 @@ export function EventForm({
           />
           <span>
             <span className="font-bold">Offer carpools</span>
-            <span className="mt-1 block text-base text-ink/80">
+            <span className="meta-line mt-1 block">
               Guests who are Going can offer seats or ask for a ride. The list is visible to Going guests and
               to you.
             </span>

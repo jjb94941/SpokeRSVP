@@ -39,8 +39,8 @@ export default async function HostEventPage({
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
       <p className="mb-4">
-        <Link href="/host" className="text-lg font-semibold text-teal underline">
-          Back to host home
+        <Link href="/host" className="text-[17px] font-bold text-teal underline">
+          Back to all village events
         </Link>
       </p>
       <Flash ok={q.ok} error={q.error} />
@@ -49,32 +49,33 @@ export default async function HostEventPage({
           This event is cancelled.
         </p>
       ) : null}
-      <h1 className="font-display text-4xl">{event.title}</h1>
-      <p className="mt-2 text-xl">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
-      <p className="mt-1 text-lg">{event.locationName}</p>
+      <h1 className="font-display text-[32px] leading-tight font-bold">{event.title}</h1>
+      <p className="meta-line mt-2">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
+      <p className="meta-line mt-1">{event.locationName}</p>
       {event.streetAddress ? (
-        <p className="mt-1 text-base text-ink/80">Private street address: {event.streetAddress}</p>
+        <p className="meta-line mt-1">Private street address: {event.streetAddress}</p>
       ) : null}
-      <p className="mt-4 text-lg">
-        {counts.going} going of {event.capacity}
+      <p className="status-line mt-3">
+        {counts.going} going · {counts.waitlist} waitlist · {counts.notGoing} not going · capacity {event.capacity}
         {counts.spotsLeft === 0 ? " · full" : ` · ${counts.spotsLeft} spots left`}
-        {counts.waitlist ? ` · ${counts.waitlist} waitlist` : ""}
       </p>
-      {event.description ? <p className="mt-4 max-w-3xl whitespace-pre-wrap text-lg">{event.description}</p> : null}
+      {event.description ? (
+        <p className="mt-4 max-w-3xl whitespace-pre-wrap text-[17px] text-ink">{event.description}</p>
+      ) : null}
 
       <div className="mt-6 flex flex-wrap gap-3">
         <CopyLinkButton url={shareUrl} />
-        <Link href={`/e/${event.shareToken}`} className="btn-teal">
+        <Link href={`/e/${event.shareToken}`} className="btn-secondary">
           Open guest RSVP page
         </Link>
-        <Link href={`/host/events/${event.id}/edit`} className="btn-teal">
+        <Link href={`/host/events/${event.id}/edit`} className="btn-secondary">
           Edit event
         </Link>
-        <a href={`/host/events/${event.id}/export`} className="btn-teal">
+        <a href={`/host/events/${event.id}/export`} className="btn-secondary">
           Download CSV
         </a>
       </div>
-      <p className="mt-3 break-all text-base">
+      <p className="meta-line mt-3 break-all">
         Share link:{" "}
         <a href={shareUrl} className="font-semibold text-teal underline">
           {shareUrl}
@@ -91,11 +92,11 @@ export default async function HostEventPage({
         ) : (
           <ul className="grid gap-3">
             {waitlist.map(({ rsvp }, index) => (
-              <li key={rsvp.id} className="rounded-xl bg-white px-4 py-3">
-                <p className="text-lg font-bold">
+              <li key={rsvp.id} className="inset-row">
+                <p className="text-[17px] font-bold text-ink">
                   {index + 1}. {rsvp.guestName}
                 </p>
-                <p className="text-base">
+                <p className="meta-line">
                   {rsvp.email || "—"} · {rsvp.phone ? formatPhoneDisplay(rsvp.phone) : "—"}
                 </p>
                 <form action={hostPromote} className="mt-3">
@@ -118,13 +119,13 @@ export default async function HostEventPage({
           ) : (
             <ul className="grid gap-3">
               {carpoolRows.map(({ rsvp, carpool }) => (
-                <li key={rsvp.id} className="rounded-xl bg-white px-4 py-3 text-lg">
+                <li key={rsvp.id} className="inset-row text-[17px] text-ink">
                   <strong>{rsvp.guestName}</strong>{" "}
                   {carpool?.role === "offer"
                     ? `can offer ${carpool.seats || 1} seat${(carpool.seats || 1) === 1 ? "" : "s"}`
                     : "needs a ride"}
                   {carpool?.note ? ` — ${carpool.note}` : ""}
-                  <div className="text-base">
+                  <div className="meta-line">
                     {rsvp.email || "—"} · {rsvp.phone ? formatPhoneDisplay(rsvp.phone) : "—"}
                   </div>
                 </li>
@@ -142,14 +143,14 @@ export default async function HostEventPage({
         {event.status === "cancelled" ? (
           <form action={restoreEvent}>
             <input type="hidden" name="id" value={event.id} />
-            <button type="submit" className="btn-teal">
+            <button type="submit" className="btn-secondary">
               Restore this event
             </button>
           </form>
         ) : (
           <form action={cancelEvent}>
             <h2 className="font-display mb-3 text-2xl">Cancel event</h2>
-            <p className="mb-3 text-base">
+            <p className="meta-line mb-3">
               The RSVP page will tell guests the gathering is cancelled. Existing RSVPs stay in the list.
             </p>
             <label className="mb-4 flex items-center gap-3 text-lg">

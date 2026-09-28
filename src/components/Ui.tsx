@@ -37,23 +37,20 @@ export function Field({
 }) {
   return (
     <div className="mb-5">
-      <label htmlFor={htmlFor} className="mb-1 block text-lg font-bold">
+      <label htmlFor={htmlFor} className="mb-1 block text-[17px] font-bold text-ink">
         {label}
       </label>
-      {hint ? <p className="mb-2 text-base text-ink/80">{hint}</p> : null}
+      {hint ? <p className="meta-line mb-2">{hint}</p> : null}
       {children}
     </div>
   );
 }
 
 export const inputClass =
-  "w-full min-h-14 rounded-xl border-2 border-sand-deep bg-white px-4 text-lg text-ink placeholder:text-ink/45";
+  "w-full min-h-14 rounded-[14px] border-2 border-card-border bg-white px-4 text-[17px] text-ink placeholder:text-muted";
 
-export const btnPrimary =
-  "inline-flex min-h-14 items-center justify-center rounded-xl bg-terracotta px-6 text-lg font-bold text-cream shadow-sm hover:bg-terracotta-dark disabled:opacity-60";
+export const btnPrimary = "btn-primary";
 
-export const btnTeal =
-  "inline-flex min-h-14 items-center justify-center rounded-xl bg-teal px-6 text-lg font-bold text-cream shadow-sm hover:bg-teal-dark";
+export const btnTeal = "btn-teal";
 
-export const btnSecondary =
-  "inline-flex min-h-14 items-center justify-center rounded-xl border-2 border-ink/20 bg-white px-6 text-lg font-bold text-ink hover:bg-sand";
+export const btnSecondary = "btn-secondary";

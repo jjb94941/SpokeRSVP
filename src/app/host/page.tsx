@@ -34,30 +34,34 @@ export default async function HostHome({
       <Flash ok={params.ok} error={params.error} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-lg text-teal">Signed in as {host.email}</p>
-          <h1 className="font-display mt-1 text-4xl">Your events</h1>
+          <p className="meta-line">Signed in as {host.email}</p>
+          <h1 className="font-display mt-1 text-[32px] leading-tight font-bold">All village events</h1>
         </div>
         <Link href="/host/events/new" className="btn-primary">
           Create an event
         </Link>
       </div>
       {listed.length === 0 ? (
-        <p className="mt-8 text-lg">No events yet. Create one and share the RSVP link with neighbors.</p>
+        <p className="mt-8 text-[17px] text-ink">
+          No events yet. Create one and share the RSVP link with neighbors.
+        </p>
       ) : (
-        <ul className="mt-8 grid gap-5">
+        <ul className="mt-8 grid gap-[14px]">
           {listed.map(({ event, counts }) => (
               <li key={event.id} className="card">
                 {event.status === "cancelled" ? (
-                  <p className="mb-2 font-bold text-terracotta">Cancelled</p>
+                  <p className="mb-2 text-[16px] font-bold text-terracotta">Cancelled</p>
                 ) : null}
-                <h2 className="font-display text-3xl">{event.title}</h2>
-                <p className="mt-1 text-lg">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
-                <p className="mt-1 text-lg">{event.locationName}</p>
-                <p className="mt-3 text-lg">
+                <h2 className="font-display text-[24px] leading-tight font-bold">{event.title}</h2>
+                <p className="meta-line mt-2">
+                  {formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}
+                </p>
+                <p className="meta-line">{event.locationName}</p>
+                <p className="status-line mt-2.5">
                   {counts.going} going · {counts.waitlist} waitlist · {counts.notGoing} not going · capacity{" "}
                   {event.capacity}
                 </p>
-                <Link href={`/host/events/${event.id}`} className="btn-teal mt-5">
+                <Link href={`/host/events/${event.id}`} className="btn-secondary mt-4">
                   Open dashboard for {event.title}
                 </Link>
               </li>
