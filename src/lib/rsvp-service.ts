@@ -260,10 +260,6 @@ export async function submitRsvp(
     await upsertCarpool(result.id, "none", null, null);
   }
 
-  if (previousStatus === "going" && result.status !== "going") {
-    await autoPromoteWaitlist(event);
-  }
-
   return { rsvp: result, previousStatus };
 }
 

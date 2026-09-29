@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { pacificWallToUtc, utcToPacificParts } from "../src/lib/time";
-import { newId, newShareToken } from "../src/lib/ids";
+import { newId, newSecretToken, newShareToken } from "../src/lib/ids";
 import { closeDb, getClient, getDb } from "../src/lib/db";
 import { events, hosts, rsvps } from "../src/lib/db/schema";
 import { autoPromoteWaitlist, getEventCounts, submitRsvp } from "../src/lib/rsvp-service";
@@ -107,17 +107,76 @@ async function rsvpFlow() {
     manageToken: a.rsvp.manageToken,
   });
   counts = await getEventCounts(event);
-  assert.equal(counts.going, 2, "waitlist guest should auto-promote when a Going guest leaves");
-  assert.equal(counts.waitlist, 0);
+  assert.equal(counts.going, 1, "cancelling frees the seat instead of filling it from the waitlist");
+  assert.equal(counts.spotsLeft, 1);
+  assert.equal(counts.waitlist, 1);
   const cara = await db.select().from(rsvps).where(eq(rsvps.id, c.rsvp.id)).get();
-  assert.equal(cara?.status, "going");
+  assert.equal(cara?.status, "waitlist");
+
+  const openId = newId();
+  await db
+    .insert(events)
+    .values({
+      id: openId,
+      hostId,
+      title: "Open seats",
+      description: "",
+      startsAt: pacificWallToUtc("2026-10-02", "10:00"),
+      endsAt: null,
+      locationName: "Park",
+      streetAddress: null,
+      capacity: 10,
+      carpoolsEnabled: false,
+      status: "published",
+      village: "Mill Valley",
+      shareToken: newShareToken(),
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+  const open = (await db.select().from(events).where(eq(events.id, openId)).get())!;
+  await submitRsvp(open, { guestName: "Grace", email: "grace@example.com", desiredStatus: "going" });
+  await submitRsvp(open, { guestName: "Helen", phone: "4155550177", desiredStatus: "going" });
+  await db
+    .insert(rsvps)
+    .values({
+      id: newId(),
+      eventId: open.id,
+      guestName: "Elena",
+      email: "elena-wait@example.com",
+      phone: null,
+      status: "waitlist",
+      waitlistOrder: 1,
+      manageToken: newSecretToken(18),
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+  const beforeOpen = await getEventCounts(open);
+  assert.equal(beforeOpen.spotsLeft, 8);
+  assert.equal(beforeOpen.waitlist, 1);
+  const joiner = await submitRsvp(open, {
+    guestName: "Neighbor",
+    email: "neighbor-seats@example.com",
+    desiredStatus: "going",
+  });
+  assert.equal((await getEventCounts(open)).spotsLeft, 7);
+  await submitRsvp(open, {
+    guestName: "Neighbor",
+    email: "neighbor-seats@example.com",
+    desiredStatus: "not_going",
+    manageToken: joiner.rsvp.manageToken,
+  });
+  const afterOpen = await getEventCounts(open);
+  assert.equal(afterOpen.spotsLeft, 8, "cancel should restore the open seats from before signup");
+  assert.equal(afterOpen.waitlist, 1);
 
   const extra = await submitRsvp(event, {
     guestName: "Dee",
     email: "dee@example.com",
     desiredStatus: "going",
   });
-  assert.equal(extra.rsvp.status, "waitlist");
+  assert.equal(extra.rsvp.status, "going");
   await autoPromoteWaitlist(event);
   assert.equal((await getEventCounts(event)).waitlist, 1, "auto-promote should not overfill");
 
