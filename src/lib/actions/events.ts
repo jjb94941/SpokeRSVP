@@ -6,6 +6,7 @@ import { z } from "zod";
 import { appUrl, requireHost } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events } from "@/lib/db/schema";
+import { resolveEventTypeId } from "@/lib/event-catalog";
 import { newId, newShareToken } from "@/lib/ids";
 import { findManagedEvent, isAdmin } from "@/lib/roles";
 import { isVillage } from "@/lib/villages";
@@ -74,6 +75,12 @@ export async function createEvent(formData: FormData) {
         ),
     );
   }
+  let eventTypeId: string;
+  try {
+    eventTypeId = await resolveEventTypeId(String(formData.get("eventTypeId") || ""));
+  } catch (error) {
+    redirect("/host/events/new?error=" + encodeURIComponent((error as Error).message));
+  }
   const now = new Date();
   const id = newId();
   const db = await getDb();
@@ -82,6 +89,7 @@ export async function createEvent(formData: FormData) {
     .values({
       id,
       hostId: host.id,
+      eventTypeId,
       village,
       shareToken: newShareToken(),
       status: "published",
@@ -111,10 +119,16 @@ export async function updateEvent(formData: FormData) {
     }
     village = requested;
   }
+  let eventTypeId = managed.event.eventTypeId;
+  try {
+    eventTypeId = await resolveEventTypeId(String(formData.get("eventTypeId") || ""), managed.event.eventTypeId);
+  } catch (error) {
+    redirect(`/host/events/${id}/edit?error=` + encodeURIComponent((error as Error).message));
+  }
   const db = await getDb();
   await db
     .update(events)
-    .set({ ...values, village, updatedAt: new Date() })
+    .set({ ...values, village, eventTypeId, updatedAt: new Date() })
     .where(eq(events.id, id))
     .run();
   redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event updated."));

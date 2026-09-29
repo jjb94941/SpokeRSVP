@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import { pacificWallToUtc, utcToPacificParts } from "../src/lib/time";
 import { newId, newSecretToken, newShareToken } from "../src/lib/ids";
 import { closeDb, getClient, getDb } from "../src/lib/db";
-import { events, hosts, rsvps } from "../src/lib/db/schema";
+import { eventTypes, events, hosts, rsvps, waiverSignatures, waiverVersions } from "../src/lib/db/schema";
 import { autoPromoteWaitlist, getEventCounts, submitRsvp } from "../src/lib/rsvp-service";
 import {
   HostAdminError,
@@ -20,7 +20,9 @@ import {
   parseNewSubAdmin,
 } from "../src/lib/roles";
 import { APP_VERSION, appVersionLabel } from "../src/lib/version";
+import { BOOK_TYPE_NAME, SOCIAL_TYPE_NAME, WALK_TYPE_NAME, WALK_WAIVER_BODY } from "../src/lib/event-catalog";
 import { safeMemberReturnPath } from "../src/lib/member-path";
+import { appendWaiverVersion, assertCanManageCatalog, needsWaiverSignature, unsignedWaiverForEvent } from "../src/lib/waivers";
 import { parseVillageFilter, toggleVillageHref, villageFilterHref } from "../src/lib/villages";
 
 config();
@@ -51,6 +53,8 @@ async function rsvpFlow() {
       createdAt: now,
     })
     .run();
+  const social = await db.select().from(eventTypes).where(eq(eventTypes.name, SOCIAL_TYPE_NAME)).get();
+  assert.ok(social, "catalog should include Social");
   const eventId = newId();
   const shareToken = newShareToken();
   await db
@@ -58,6 +62,7 @@ async function rsvpFlow() {
     .values({
       id: eventId,
       hostId,
+      eventTypeId: social.id,
       title: "Test hike",
       description: "",
       startsAt: pacificWallToUtc("2026-09-16", "10:00"),
@@ -119,6 +124,7 @@ async function rsvpFlow() {
     .values({
       id: openId,
       hostId,
+      eventTypeId: social.id,
       title: "Open seats",
       description: "",
       startsAt: pacificWallToUtc("2026-10-02", "10:00"),
@@ -284,6 +290,11 @@ function villageFilters() {
   assert.equal(toggleVillageHref(["Novato"], "Ross Valley"), "/?villages=Novato%2CRoss%20Valley");
   assert.equal(safeMemberReturnPath("/my-events"), "/my-events");
   assert.equal(safeMemberReturnPath("/my-events?ok=done"), "/my-events");
+  assert.equal(
+    safeMemberReturnPath("/waiver/sign?eventId=11111111-1111-4111-8111-111111111111"),
+    "/waiver/sign?eventId=11111111-1111-4111-8111-111111111111",
+  );
+  assert.equal(safeMemberReturnPath("/waiver/sign?eventId=not-an-id"), "/");
   assert.equal(safeMemberReturnPath("/?villages=Tiburon,Nope"), "/?villages=Tiburon");
   assert.equal(safeMemberReturnPath("//evil.example"), "/");
   assert.equal(safeMemberReturnPath("https://evil.example/my-events"), "/");
@@ -296,6 +307,106 @@ function versionLabel() {
   assert.match(appVersionLabel(), /^Ver\. \d+\.\d+ · [A-Za-z]+ \d{1,2}, \d{4}$/);
 }
 
+async function waiverRules() {
+  const admin = { role: "admin" as const };
+  const sub = { role: "sub_admin" as const };
+  assert.doesNotThrow(() => assertCanManageCatalog(admin));
+  assert.throws(() => assertCanManageCatalog(sub), HostAdminError);
+  assert.equal(needsWaiverSignature(null, null), false);
+  assert.equal(needsWaiverSignature("version-1", null), true);
+  assert.equal(needsWaiverSignature("version-1", "version-1"), false);
+  assert.equal(needsWaiverSignature("version-2", "version-1"), true);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spoke-waiver-"));
+  process.env.DATABASE_URL = `file:${path.join(dir, "spoke.db")}`;
+  delete process.env.DATABASE_AUTH_TOKEN;
+  closeDb();
+  const db = await getDb();
+  const now = new Date();
+  const walk = await db.select().from(eventTypes).where(eq(eventTypes.name, WALK_TYPE_NAME)).get();
+  const book = await db.select().from(eventTypes).where(eq(eventTypes.name, BOOK_TYPE_NAME)).get();
+  assert.ok(walk?.waiverId, "Walk/Hike should have a waiver");
+  assert.equal(book?.waiverId ?? null, null, "Book club should not have a waiver");
+  assert.equal(await unsignedWaiverForEvent(book!.id, "neighbor@example.com"), null);
+
+  const hostId = newId();
+  await db
+    .insert(hosts)
+    .values({
+      id: hostId,
+      email: "chair@millvalleyvillage.org",
+      passwordHash: bcrypt.hashSync("millvalley", 4),
+      name: "Chair",
+      role: "admin",
+      createdAt: now,
+    })
+    .run();
+  const eventId = newId();
+  await db
+    .insert(events)
+    .values({
+      id: eventId,
+      hostId,
+      eventTypeId: walk!.id,
+      title: "Dawn hike",
+      description: "",
+      startsAt: pacificWallToUtc("2026-10-04", "09:00"),
+      endsAt: null,
+      locationName: "Trailhead",
+      streetAddress: null,
+      capacity: 8,
+      carpoolsEnabled: false,
+      status: "published",
+      village: "Mill Valley",
+      shareToken: newShareToken(),
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+  const email = "neighbor@example.com";
+  const required = await unsignedWaiverForEvent(walk!.id, email);
+  assert.ok(required, "signing is required before the first registration");
+  assert.equal(required!.version, 1);
+
+  const joined = await submitRsvp((await db.select().from(events).where(eq(events.id, eventId)).get())!, {
+    guestName: "Neighbor Person",
+    email,
+    desiredStatus: "going",
+  });
+  assert.equal(joined.rsvp.status, "going");
+
+  await db
+    .insert(waiverSignatures)
+    .values({
+      id: newId(),
+      waiverId: required!.waiverId,
+      waiverVersionId: required!.id,
+      version: required!.version,
+      email,
+      signerName: "Neighbor Person",
+      signedAt: now,
+    })
+    .run();
+  assert.equal(await unsignedWaiverForEvent(walk!.id, email), null, "an existing signature skips the waiver");
+
+  const next = await appendWaiverVersion(required!.waiverId, required!.title, `${WALK_WAIVER_BODY}\n\nUpdated trail notice.`);
+  assert.equal(next.createdNew, true);
+  assert.equal(next.version.version, 2);
+  const resign = await unsignedWaiverForEvent(walk!.id, email);
+  assert.ok(resign, "a new waiver version must be signed before the next registration");
+  assert.equal(resign!.version, 2);
+  const kept = await db.select().from(rsvps).where(eq(rsvps.id, joined.rsvp.id)).get();
+  assert.equal(kept?.status, "going", "a new waiver version does not cancel an existing registration");
+  const versions = await db.select().from(waiverVersions).where(eq(waiverVersions.waiverId, required!.waiverId)).all();
+  assert.equal(versions.length, 2);
+  const signatures = await db.select().from(waiverSignatures).all();
+  assert.equal(signatures.length, 1);
+  assert.equal(signatures[0]?.version, 1);
+
+  closeDb();
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 async function main() {
   roundtripPacific();
   villageFilters();
@@ -303,6 +414,7 @@ async function main() {
   hostRolePolicies();
   await hostRoleMigration();
   await rsvpFlow();
+  await waiverRules();
   console.log("smoke ok");
 }
 

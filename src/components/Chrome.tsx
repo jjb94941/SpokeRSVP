@@ -65,6 +65,14 @@ export async function SiteHeader({
                   Manage hosts
                 </Link>
               ) : null}
+              {showAdminNav ? (
+                <Link
+                  href="/host/event-types"
+                  className="rounded-lg px-3 py-2 font-semibold underline-offset-4 hover:underline"
+                >
+                  Event types
+                </Link>
+              ) : null}
               <form action={logout}>
                 <button type="submit" className="rounded-lg px-3 py-2 font-semibold underline-offset-4 hover:underline">
                   Sign out{signedInName ? ` (${signedInName.split(" ")[0]})` : ""}

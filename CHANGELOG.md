@@ -8,6 +8,8 @@ Village hosts belong to one Marin Villages community (Tiburon, Mill Valley, Nova
 
 Members sign up from the public events list with email only. After they are signed up, that card says **Cancel my planned attendance at** the event. **My events** lists every signup across villages and uses the same cancel action. Cancelling restores the open-seat count from before that signup.
 
+Every event has an event type. Super-administrators manage types and waivers at `/host/event-types`. A type may have one waiver. Neighbors read it, agree, and type their full name before registering, including when the event is full. Signing the current version once is enough until the waiver text changes. Existing registrations stay in place.
+
 ## Ver. 2.0 · September 15, 2026
 
 Administrator and sub-administrator host roles.

@@ -2,6 +2,7 @@ import { createEvent } from "@/lib/actions/events";
 import { EventForm } from "@/components/EventForm";
 import { Flash } from "@/components/Ui";
 import { requireHost } from "@/lib/auth";
+import { listEventTypeChoices } from "@/lib/event-catalog";
 import { isAdmin } from "@/lib/roles";
 import Link from "next/link";
 
@@ -13,6 +14,7 @@ export default async function NewEventPage({
   const params = await searchParams;
   const host = await requireHost();
   const admin = isAdmin(host);
+  const eventTypes = await listEventTypeChoices();
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
       <p className="mb-4">
@@ -27,6 +29,7 @@ export default async function NewEventPage({
         submitLabel="Create event"
         chooseVillage={admin}
         defaultVillage={host.village || "Mill Valley"}
+        eventTypes={eventTypes}
       />
     </main>
   );

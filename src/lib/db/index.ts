@@ -87,6 +87,8 @@ export async function getClient(): Promise<Client> {
 
 export async function getDb(): Promise<Db> {
   const slot = await connect();
+  const { ensureEventCatalog } = await import("../event-catalog");
+  await ensureEventCatalog(slot.db);
   return slot.db;
 }
 
@@ -105,6 +107,10 @@ export function closeDb() {
 export async function wipeData() {
   const client = await getClient();
   await client.executeMultiple(`
+    DELETE FROM waiver_signatures;
+    DELETE FROM waiver_versions;
+    DELETE FROM event_types;
+    DELETE FROM waivers;
     DELETE FROM carpools;
     DELETE FROM rsvps;
     DELETE FROM magic_links;
@@ -141,9 +147,46 @@ export async function ensureSchema(client?: Client) {
       used_at INTEGER
     );
 
+    CREATE TABLE IF NOT EXISTS waivers (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS waiver_versions (
+      id TEXT PRIMARY KEY,
+      waiver_id TEXT NOT NULL REFERENCES waivers(id) ON DELETE CASCADE,
+      version INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE (waiver_id, version)
+    );
+
+    CREATE TABLE IF NOT EXISTS waiver_signatures (
+      id TEXT PRIMARY KEY,
+      waiver_id TEXT NOT NULL REFERENCES waivers(id) ON DELETE CASCADE,
+      waiver_version_id TEXT NOT NULL REFERENCES waiver_versions(id) ON DELETE CASCADE,
+      version INTEGER NOT NULL,
+      email TEXT NOT NULL,
+      signer_name TEXT NOT NULL,
+      signed_at INTEGER NOT NULL,
+      UNIQUE (waiver_version_id, email)
+    );
+
+    CREATE TABLE IF NOT EXISTS event_types (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      waiver_id TEXT REFERENCES waivers(id) ON DELETE SET NULL,
+      archived INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
       host_id TEXT NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+      event_type_id TEXT,
       village TEXT NOT NULL DEFAULT 'Mill Valley',
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
@@ -187,6 +230,7 @@ export async function ensureSchema(client?: Client) {
   `);
   await ensureHostRoleColumn(target);
   await ensureVillageColumns(target);
+  await ensureEventTypeColumn(target);
 }
 
 function columnName(row: Record<string, unknown>): string {
@@ -225,4 +269,11 @@ async function ensureVillageColumns(client: Client) {
   await client.execute(
     `UPDATE hosts SET village = 'Mill Valley' WHERE role = 'sub_admin' AND (village IS NULL OR village NOT IN (${allowed}))`,
   );
+}
+
+async function ensureEventTypeColumn(client: Client) {
+  const info = await client.execute("PRAGMA table_info(events)");
+  if (!info.rows.some((row) => columnName(row as Record<string, unknown>) === "event_type_id")) {
+    await client.execute("ALTER TABLE events ADD COLUMN event_type_id TEXT");
+  }
 }

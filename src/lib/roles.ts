@@ -35,10 +35,12 @@ export function roleLabel(role: string | null | undefined): string {
   return normalizeHostRole(role) === "admin" ? "Super-administrator" : "Village host";
 }
 
-export async function requireAdmin(): Promise<Host> {
+export async function requireAdmin(
+  message = "Only super-administrators can manage host accounts.",
+): Promise<Host> {
   const host = await requireHost();
   if (!isAdmin(host)) {
-    redirect("/host?error=" + encodeURIComponent("Only super-administrators can manage host accounts."));
+    redirect("/host?error=" + encodeURIComponent(message));
   }
   return host;
 }

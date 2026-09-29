@@ -5,10 +5,11 @@ import { Flash } from "@/components/Ui";
 import { memberCancelRsvp, memberRsvp, signInMember, signOutMember } from "@/lib/actions/member";
 import { getMemberEmail } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { events, rsvps } from "@/lib/db/schema";
+import { eventTypes, events, rsvps } from "@/lib/db/schema";
 import { normalizeEmail } from "@/lib/format";
 import { getEventCounts } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
+import { unsignedWaiverForEvent } from "@/lib/waivers";
 import { VILLAGES, parseVillageFilter, toggleVillageHref, villageFilterHref, villageTitle } from "@/lib/villages";
 
 export default async function HomePage({
@@ -33,6 +34,13 @@ export default async function HomePage({
         )
       : [];
   const rsvpByEvent = new Map(memberRsvps.map((row) => [row.eventId, row]));
+  const typeNames = new Map((await db.select().from(eventTypes).all()).map((type) => [type.id, type.name]));
+  const needsWaiver = new Set<string>();
+  if (memberEmail) {
+    for (const event of published) {
+      if (await unsignedWaiverForEvent(event.eventTypeId, memberEmail)) needsWaiver.add(event.id);
+    }
+  }
   const listed = await Promise.all(
     published.map(async (event) => ({
       event,
@@ -123,7 +131,10 @@ export default async function HomePage({
             <ul className="mt-5 grid gap-[14px]">
               {listed.map(({ event, counts, rsvp }) => (
                 <li key={event.id} className="card">
-                  <p className="meta-line">{villageTitle(event.village)}</p>
+                  <p className="meta-line">
+                    {villageTitle(event.village)}
+                    {typeNames.get(event.eventTypeId || "") ? ` · ${typeNames.get(event.eventTypeId || "")}` : ""}
+                  </p>
                   <h3 className="font-display mt-1 text-[24px] leading-tight font-bold">{event.title}</h3>
                   <p className="meta-line mt-2">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
                   <p className="meta-line">{event.locationName}</p>
@@ -149,7 +160,13 @@ export default async function HomePage({
                       <input type="hidden" name="returnTo" value={returnTo} />
                       <input type="hidden" name="eventId" value={event.id} />
                       <button type="submit" className="btn-primary">
-                        {counts.spotsLeft === 0 ? `Join the waitlist for ${event.title}` : `Sign up for ${event.title}`}
+                        {needsWaiver.has(event.id)
+                          ? counts.spotsLeft === 0
+                            ? `Sign the waiver and join the waitlist for ${event.title}`
+                            : `Sign the waiver and sign up for ${event.title}`
+                          : counts.spotsLeft === 0
+                            ? `Join the waitlist for ${event.title}`
+                            : `Sign up for ${event.title}`}
                       </button>
                     </form>
                   )}

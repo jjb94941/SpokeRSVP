@@ -3,7 +3,8 @@ import fs from "node:fs";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { closeDb, fileUrlToPath, getDb, resolveDatabaseUrl, wipeData } from "../src/lib/db";
-import { carpools, events, hosts, rsvps } from "../src/lib/db/schema";
+import { BOOK_TYPE_NAME, SOCIAL_TYPE_NAME, WALK_TYPE_NAME } from "../src/lib/event-catalog";
+import { carpools, eventTypes, events, hosts, rsvps } from "../src/lib/db/schema";
 import { newId, newSecretToken, newShareToken } from "../src/lib/ids";
 import { pacificWallToUtc } from "../src/lib/time";
 
@@ -85,6 +86,15 @@ async function main() {
   const hikeId = newId();
   const coffeeId = newId();
   const bookId = newId();
+  const catalog = await db.select().from(eventTypes).all();
+  const typeId = (name: string) => {
+    const found = catalog.find((type) => type.name === name);
+    if (!found) throw new Error(`Missing event type ${name}. Restart the app so the catalog can be created.`);
+    return found.id;
+  };
+  const walkTypeId = typeId(WALK_TYPE_NAME);
+  const socialTypeId = typeId(SOCIAL_TYPE_NAME);
+  const bookTypeId = typeId(BOOK_TYPE_NAME);
 
   await db
     .insert(events)
@@ -92,6 +102,7 @@ async function main() {
       {
         id: hikeId,
         hostId,
+        eventTypeId: walkTypeId,
         title: "Third Wednesday Walkers",
         description:
           "A 2–3 mile mostly-flat walk with time for lunch afterward. We gather in Mill Valley and often carpool to the trail. Wear comfortable shoes and bring water.",
@@ -110,6 +121,7 @@ async function main() {
       {
         id: coffeeId,
         hostId,
+        eventTypeId: socialTypeId,
         title: "Friday coffee at Equator",
         description:
           "Informal drop-in coffee for Mill Valley Village neighbors. Come for as long as you like — no program, just conversation.",
@@ -128,6 +140,7 @@ async function main() {
       {
         id: bookId,
         hostId,
+        eventTypeId: bookTypeId,
         title: "Third Tuesday Book Club",
         description:
           "Small discussion group kept intimate on purpose. This month we are reading a novel chosen by the group. Newcomers are welcome when a seat opens — please join the waitlist if we are full.",
@@ -146,6 +159,7 @@ async function main() {
       {
         id: newId(),
         hostId: volunteerId,
+        eventTypeId: socialTypeId,
         title: "Saturday stretch & chat",
         description:
           "Gentle stretching in the park, then a short sit-down conversation. Hosted by a Mill Valley village host.",

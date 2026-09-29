@@ -4,12 +4,14 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { clearMemberEmail, getMemberEmail, setGuestCookie, setMemberEmail } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { events, rsvps } from "@/lib/db/schema";
+import { events, rsvps, waiverSignatures, type EventRow } from "@/lib/db/schema";
 import { normalizeEmail } from "@/lib/format";
+import { newId } from "@/lib/ids";
 import { sendEmail, rsvpConfirmationText } from "@/lib/notify";
 import { submitRsvp } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
 import { safeMemberReturnPath } from "@/lib/member-path";
+import { isFullSignerName, unsignedWaiverForEvent } from "@/lib/waivers";
 
 function memberReturnPath(formData: FormData): string {
   return safeMemberReturnPath(String(formData.get("returnTo") || "/"));
@@ -36,18 +38,12 @@ export async function signOutMember(formData: FormData) {
   redirect(memberReturnPath(formData));
 }
 
-export async function memberRsvp(formData: FormData) {
-  const returnTo = memberReturnPath(formData);
-  const email = await getMemberEmail();
-  if (!email) emailError(returnTo, "Enter your email above before you sign up. No password is needed.");
+function waiverSignPath(eventId: string): string {
+  return `/waiver/sign?eventId=${encodeURIComponent(eventId)}`;
+}
 
-  const eventId = String(formData.get("eventId") || "");
+async function finishMemberRsvp(event: EventRow, email: string, returnTo: string, guestName?: string): Promise<never> {
   const db = await getDb();
-  const event = await db.select().from(events).where(eq(events.id, eventId)).get();
-  if (!event || event.status !== "published") {
-    emailError(returnTo, "That event is not open for sign-up.");
-  }
-
   const existing = (await db.select().from(rsvps).where(eq(rsvps.eventId, event.id)).all()).find(
     (row) => normalizeEmail(row.email) === email,
   );
@@ -55,8 +51,9 @@ export async function memberRsvp(formData: FormData) {
   let rsvp;
   try {
     ({ rsvp } = await submitRsvp(event, {
-      guestName: existing?.guestName || email,
+      guestName: guestName || existing?.guestName || email,
       email,
+      phone: existing?.phone,
       desiredStatus: "going",
       manageToken: existing?.manageToken,
     }));
@@ -85,6 +82,70 @@ export async function memberRsvp(formData: FormData) {
       : `${email} is signed up for ${event.title}.`;
   const join = returnTo.includes("?") ? "&" : "?";
   redirect(`${returnTo}${join}ok=` + encodeURIComponent(thanks));
+}
+
+export async function memberRsvp(formData: FormData) {
+  const returnTo = memberReturnPath(formData);
+  const email = await getMemberEmail();
+  if (!email) emailError(returnTo, "Enter your email above before you sign up. No password is needed.");
+
+  const eventId = String(formData.get("eventId") || "");
+  const db = await getDb();
+  const event = await db.select().from(events).where(eq(events.id, eventId)).get();
+  if (!event || event.status !== "published") {
+    emailError(returnTo, "That event is not open for sign-up.");
+  }
+
+  const needed = await unsignedWaiverForEvent(event.eventTypeId, email);
+  if (needed) redirect(waiverSignPath(event.id));
+  await finishMemberRsvp(event, email, returnTo);
+}
+
+export async function signWaiverAndRegister(formData: FormData) {
+  const eventId = String(formData.get("eventId") || "");
+  const returnTo = memberReturnPath(formData);
+  const back = waiverSignPath(eventId);
+  const email = await getMemberEmail();
+  if (!email) emailError(back, "Enter your email before you sign. No password is needed.");
+
+  const db = await getDb();
+  const event = await db.select().from(events).where(eq(events.id, eventId)).get();
+  if (!event || event.status !== "published") {
+    emailError(returnTo, "That event is not open for sign-up.");
+  }
+
+  const needed = await unsignedWaiverForEvent(event.eventTypeId, email);
+  if (!needed) await finishMemberRsvp(event, email, returnTo);
+  if (!needed) return;
+
+  if (String(formData.get("agree") || "") !== "yes") {
+    emailError(back, "Check the box to say you have read the waiver and agree.");
+  }
+  const signerName = String(formData.get("signerName") || "").trim();
+  if (!isFullSignerName(signerName)) emailError(back, "Type your full name, first and last.");
+  if (String(formData.get("versionId") || "") !== needed.id) {
+    emailError(back, "This waiver was updated. Please read the new version and sign it.");
+  }
+
+  try {
+    await db
+      .insert(waiverSignatures)
+      .values({
+        id: newId(),
+        waiverId: needed.waiverId,
+        waiverVersionId: needed.id,
+        version: needed.version,
+        email,
+        signerName,
+        signedAt: new Date(),
+      })
+      .run();
+  } catch (error) {
+    const stillNeeded = await unsignedWaiverForEvent(event.eventTypeId, email);
+    if (stillNeeded) emailError(back, (error as Error).message);
+  }
+
+  await finishMemberRsvp(event, email, returnTo, signerName);
 }
 
 export async function memberCancelRsvp(formData: FormData) {

@@ -30,11 +30,61 @@ export const magicLinks = sqliteTable("magic_links", {
   usedAt: integer("used_at", { mode: "timestamp_ms" }),
 });
 
+export const waivers = sqliteTable("waivers", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+export const waiverVersions = sqliteTable(
+  "waiver_versions",
+  {
+    id: text("id").primaryKey(),
+    waiverId: text("waiver_id")
+      .notNull()
+      .references(() => waivers.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [uniqueIndex("waiver_versions_waiver_version_idx").on(table.waiverId, table.version)],
+);
+
+export const waiverSignatures = sqliteTable(
+  "waiver_signatures",
+  {
+    id: text("id").primaryKey(),
+    waiverId: text("waiver_id")
+      .notNull()
+      .references(() => waivers.id, { onDelete: "cascade" }),
+    waiverVersionId: text("waiver_version_id")
+      .notNull()
+      .references(() => waiverVersions.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    email: text("email").notNull(),
+    signerName: text("signer_name").notNull(),
+    signedAt: integer("signed_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [uniqueIndex("waiver_signatures_version_email_idx").on(table.waiverVersionId, table.email)],
+);
+
+export const eventTypes = sqliteTable("event_types", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  /** When set, registering for this type requires the waiver’s current version. */
+  waiverId: text("waiver_id").references(() => waivers.id, { onDelete: "set null" }),
+  archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
 export const events = sqliteTable("events", {
   id: text("id").primaryKey(),
   hostId: text("host_id")
     .notNull()
     .references(() => hosts.id, { onDelete: "cascade" }),
+  eventTypeId: text("event_type_id").references(() => eventTypes.id),
   village: text("village").notNull().default("Mill Valley"),
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
@@ -86,6 +136,10 @@ export const carpools = sqliteTable("carpools", {
 
 export type Host = typeof hosts.$inferSelect;
 export type EventRow = typeof events.$inferSelect;
+export type EventTypeRow = typeof eventTypes.$inferSelect;
+export type WaiverRow = typeof waivers.$inferSelect;
+export type WaiverVersionRow = typeof waiverVersions.$inferSelect;
+export type WaiverSignatureRow = typeof waiverSignatures.$inferSelect;
 export type RsvpRow = typeof rsvps.$inferSelect;
 export type CarpoolRow = typeof carpools.$inferSelect;
 export type RsvpStatus = RsvpRow["status"];
