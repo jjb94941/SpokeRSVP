@@ -73,6 +73,9 @@ export async function SiteHeader({
                   Event types
                 </Link>
               ) : null}
+              <Link href="/host/outbox" className="rounded-lg px-3 py-2 font-semibold underline-offset-4 hover:underline">
+                Outbox
+              </Link>
               <form action={logout}>
                 <button type="submit" className="rounded-lg px-3 py-2 font-semibold underline-offset-4 hover:underline">
                   Sign out{signedInName ? ` (${signedInName.split(" ")[0]})` : ""}

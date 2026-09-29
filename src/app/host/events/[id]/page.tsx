@@ -2,14 +2,21 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
+import { InvitationsPanel } from "@/components/InvitationsPanel";
 import { Flash } from "@/components/Ui";
 import { cancelEvent, hostPromote, restoreEvent } from "@/lib/actions/events";
 import { appUrl } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { hosts } from "@/lib/db/schema";
+import { events, hosts } from "@/lib/db/schema";
 import { firstName, formatPhoneDisplay, normalizeEmail } from "@/lib/format";
 import { findManagedEvent, isAdmin } from "@/lib/roles";
 import { getEventCounts, listRsvps, type RsvpListRow } from "@/lib/rsvp-service";
+import {
+  eventsAvailableToImport,
+  inviteBlockReason,
+  listImportPeople,
+  listInvitations,
+} from "@/lib/invitations";
 import { canViewWaiverAnswers, currentWaiverForType, latestAnswersForWaiver, type WaiverAnswer } from "@/lib/waivers";
 import { formatPacificRange } from "@/lib/time";
 import { villageTitle } from "@/lib/villages";
@@ -19,7 +26,7 @@ export default async function HostEventPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ ok?: string; error?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; importEvent?: string; waitlist?: string }>;
 }) {
   const { id } = await params;
   const q = await searchParams;
@@ -34,7 +41,19 @@ export default async function HostEventPage({
   const waitlist = rows.filter((row) => row.rsvp.status === "waitlist");
   const notGoing = rows.filter((row) => row.rsvp.status === "not_going");
   const carpoolRows = going.filter((row) => row.carpool && row.carpool.role !== "none");
-  const shareUrl = `${await appUrl()}/e/${event.shareToken}`;
+  const origin = await appUrl();
+  const shareUrl = `${origin}/e/${event.shareToken}`;
+  const invitationRows = await listInvitations(event.id);
+  const importChoices = eventsAvailableToImport(host, event.id, await db.select().from(events).all())
+    .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())
+    .map((choice) => ({
+      id: choice.id,
+      label: `${choice.title} — ${choice.village} — ${formatPacificRange(choice.startsAt.getTime(), choice.endsAt?.getTime())}`,
+    }));
+  const selectedImport = importChoices.find((choice) => choice.id === q.importEvent);
+  const importPeople = selectedImport
+    ? await listImportPeople(selectedImport.id, event.id, q.waitlist === "1")
+    : null;
   const waiverAnswers: { name: string; email: string; answers: WaiverAnswer[] }[] = [];
   if (canViewWaiverAnswers(host, event.village)) {
     const waiver = await currentWaiverForType(event.eventTypeId);
@@ -100,6 +119,24 @@ export default async function HostEventPage({
           {shareUrl}
         </a>
       </p>
+      {q.ok?.includes("Next: invite people") ? (
+        <p className="mt-4">
+          <a href="#invitations" className="text-[17px] font-bold text-teal underline">
+            Next: invite people
+          </a>
+        </p>
+      ) : null}
+
+      <InvitationsPanel
+        event={event}
+        origin={origin}
+        invitations={invitationRows}
+        importChoices={importChoices}
+        selectedImportId={selectedImport?.id || ""}
+        includeWaitlist={q.waitlist === "1"}
+        importPeople={importPeople}
+        linksOpen={!inviteBlockReason(event, new Date())}
+      />
 
       <GuestSection title={`Going (${going.length})`}>
         <GuestTable rows={going} showCarpool empty="No one is going yet." />

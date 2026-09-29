@@ -27,7 +27,12 @@ export default async function EditEventPage({
           Back to {event.title}
         </Link>
       </p>
-      <h1 className="font-display mb-6 text-[32px] leading-tight font-bold">Edit event</h1>
+      <h1 className="font-display mb-4 text-[32px] leading-tight font-bold">Edit event</h1>
+      <p className="mb-6">
+        <Link href={`/host/events/${event.id}#invitations`} className="text-[17px] font-bold text-teal underline">
+          Next: invite people
+        </Link>
+      </p>
       <Flash error={q.error} />
       <EventForm
         event={event}

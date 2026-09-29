@@ -125,6 +125,41 @@ export const rsvps = sqliteTable(
   (table) => [uniqueIndex("rsvps_manage_token_idx").on(table.manageToken)],
 );
 
+export const INVITE_STATUSES = ["not_sent", "sent", "opened", "registered"] as const;
+export type InviteStatus = (typeof INVITE_STATUSES)[number];
+
+export const invitations = sqliteTable(
+  "invitations",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    name: text("name"),
+    token: text("token").notNull().unique(),
+    status: text("status", { enum: INVITE_STATUSES }).notNull().default("not_sent"),
+    message: text("message").notNull().default(""),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+    sentAt: integer("sent_at", { mode: "timestamp_ms" }),
+    openedAt: integer("opened_at", { mode: "timestamp_ms" }),
+    registeredAt: integer("registered_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [uniqueIndex("invitations_event_email_idx").on(table.eventId, table.email)],
+);
+
+export const outboxMessages = sqliteTable("outbox_messages", {
+  id: text("id").primaryKey(),
+  toEmail: text("to_email").notNull(),
+  subject: text("subject").notNull(),
+  textBody: text("text_body").notNull(),
+  htmlBody: text("html_body").notNull().default(""),
+  eventId: text("event_id"),
+  provider: text("provider").notNull().default("outbox"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+});
+
 export const carpools = sqliteTable("carpools", {
   id: text("id").primaryKey(),
   rsvpId: text("rsvp_id")
@@ -146,5 +181,7 @@ export type WaiverVersionRow = typeof waiverVersions.$inferSelect;
 export type WaiverSignatureRow = typeof waiverSignatures.$inferSelect;
 export type RsvpRow = typeof rsvps.$inferSelect;
 export type CarpoolRow = typeof carpools.$inferSelect;
+export type InvitationRow = typeof invitations.$inferSelect;
+export type OutboxMessageRow = typeof outboxMessages.$inferSelect;
 export type RsvpStatus = RsvpRow["status"];
 export type CarpoolRole = CarpoolRow["role"];

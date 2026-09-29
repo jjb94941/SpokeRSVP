@@ -124,7 +124,8 @@ You can also run reminders manually: `POST` or `GET` `/api/reminders` with `Auth
 - **Members** use the public events page with email only (no password). They can filter by village, sign up, and cancel with **Cancel my planned attendance at** the event name. **My events** lists every signup across villages, and the same cancel wording works there. Cancelling restores the open-seat count from before that signup.
 - **Event types and waivers** are managed by super-administrators at `/host/event-types`. Each event has one type. A type can have one waiver, and each waiver version can include up to four questions (a label, optional help text, required or optional, single line or a larger box). The first time a neighbor registers for that type, they read the waiver, answer those questions, check that they agree, and type their full name. Later registrations skip it until the waiver text or questions change and a new version is saved. People already signed up are not removed. Answers stay with that signature. They are shown to super-administrators and to the host of the village for the event the neighbor joined. They are not on public pages or in the CSV download. Village hosts can choose a type but cannot edit types or waivers.
 - **Carpools** (when enabled): offer seats or need a ride. Visible to Going guests (first names) and the host (full contact).
-- **Email**: confirmation, waitlist promotion, and reminders go through [Resend](https://resend.com) when `RESEND_API_KEY` is set. Otherwise they are **logged** (local stub). Magic links work the same way.
+- **Invitations**: on an event dashboard, paste emails or import names and emails from another event you manage (a village host only sees their village; waiver answers are never included). Each person gets one private `/invite/…` link. The link prefills their email and follows the normal registration, including a waiver or the waitlist when needed. Links stop working if the event is cancelled or already started.
+- **Email**: the default is a local **Outbox** at `/host/outbox` plus a server log. No message is sent. See [Real email later](#real-email-later). Magic links are shown on the sign-in page in this mode. Each invitation also has **Copy link** and **Open in my email**.
 - **SMS**: not implemented (`TODO` in `src/lib/notify.ts` and `npm run reminders`).
 
 ## Host roles
@@ -192,6 +193,20 @@ This is a **village pilot**, not a production membership system.
 - Back up the Turso database (or the local `data/spoke.db` file) if you rely on the lists.
 - **Change the demo host password before production.** Never commit API keys, Turso tokens, or `REMINDER_SECRET`. Review auth, HTTPS, backups, and a real email sending domain before neighbors depend on the site.
 
+## Real email later
+
+Leave `EMAIL_PROVIDER` unset, or set it to `outbox`. That is the pilot default.
+
+To send invitation and other messages with [Resend](https://resend.com), set these three environment variables and restart the app. No code change is required.
+
+| Variable | Value |
+| --- | --- |
+| `EMAIL_PROVIDER` | `resend` |
+| `RESEND_API_KEY` | A Resend API key. Do not commit it. |
+| `RESEND_FROM` | A sender Resend has verified, for example `Marin Villages <rsvp@your-domain.org>` |
+
+SMTP is only a hook. `EMAIL_PROVIDER=smtp` reads `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM`, then keeps the message in the Outbox until `sendViaSmtp` in `src/lib/mailer.ts` has a transport. Do not put those passwords in the repo.
+
 ## Configuration
 
 Copy `.env.example` to `.env`. Nothing secret belongs in git.
@@ -200,6 +215,7 @@ Copy `.env.example` to `.env`. Nothing secret belongs in git.
 DATABASE_URL=file:./data/spoke.db
 DATABASE_AUTH_TOKEN=
 APP_URL=http://localhost:3000
+EMAIL_PROVIDER=outbox
 RESEND_API_KEY=
 RESEND_FROM=SpokeRSVP <noreply@example.com>
 REMINDER_SECRET=

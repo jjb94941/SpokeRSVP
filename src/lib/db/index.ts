@@ -107,6 +107,8 @@ export function closeDb() {
 export async function wipeData() {
   const client = await getClient();
   await client.executeMultiple(`
+    DELETE FROM outbox_messages;
+    DELETE FROM invitations;
     DELETE FROM waiver_signatures;
     DELETE FROM waiver_versions;
     DELETE FROM event_types;
@@ -225,7 +227,36 @@ export async function ensureSchema(client?: Client) {
       note TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS invitations (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      name TEXT,
+      token TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'not_sent',
+      message TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      sent_at INTEGER,
+      opened_at INTEGER,
+      registered_at INTEGER,
+      UNIQUE (event_id, email)
+    );
+
+    CREATE TABLE IF NOT EXISTS outbox_messages (
+      id TEXT PRIMARY KEY,
+      to_email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      text_body TEXT NOT NULL,
+      html_body TEXT NOT NULL DEFAULT '',
+      event_id TEXT,
+      provider TEXT NOT NULL DEFAULT 'outbox',
+      created_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS sessions_host_id_idx ON sessions(host_id);
+    CREATE INDEX IF NOT EXISTS invitations_event_id_idx ON invitations(event_id);
+    CREATE INDEX IF NOT EXISTS outbox_messages_event_id_idx ON outbox_messages(event_id);
     CREATE INDEX IF NOT EXISTS events_host_id_idx ON events(host_id);
     CREATE INDEX IF NOT EXISTS rsvps_event_id_idx ON rsvps(event_id);
     CREATE INDEX IF NOT EXISTS rsvps_event_status_idx ON rsvps(event_id, status);

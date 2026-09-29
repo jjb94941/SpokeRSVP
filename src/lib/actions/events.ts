@@ -98,7 +98,7 @@ export async function createEvent(formData: FormData) {
       ...values,
     })
     .run();
-  redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event created. Copy the RSVP link to share it."));
+  redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event created. Next: invite people.") + "#invitations");
 }
 
 export async function updateEvent(formData: FormData) {
@@ -131,7 +131,7 @@ export async function updateEvent(formData: FormData) {
     .set({ ...values, village, eventTypeId, updatedAt: new Date() })
     .where(eq(events.id, id))
     .run();
-  redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event updated."));
+  redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event updated. Next: invite people.") + "#invitations");
 }
 
 export async function cancelEvent(formData: FormData) {

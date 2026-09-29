@@ -1,42 +1,27 @@
+import { deliverEmail } from "./mailer";
+
 export type NotifyPayload = {
   to: string;
   subject: string;
   text: string;
+  html?: string;
+  eventId?: string | null;
 };
 
-function logEmail(payload: NotifyPayload, extra?: string) {
-  console.log(
-    `[SpokeRSVP email${extra ? ` ${extra}` : ""}]\nTo: ${payload.to}\nSubject: ${payload.subject}\n\n${payload.text}\n`,
-  );
-}
-
-/** Email via Resend when RESEND_API_KEY is set; otherwise log-only stub. */
+/**
+ * Deliver email through the local mailer.
+ * Default is the Outbox (no network). Set EMAIL_PROVIDER=resend plus
+ * RESEND_API_KEY and RESEND_FROM to send with Resend. See src/lib/mailer.ts.
+ */
 export async function sendEmail(payload: NotifyPayload): Promise<{ stubbed: boolean }> {
-  const key = process.env.RESEND_API_KEY?.trim();
-  if (!key) {
-    logEmail(payload, "stub");
-    return { stubbed: true };
-  }
-
-  logEmail(payload, "resend");
-  const from = process.env.RESEND_FROM?.trim() || "SpokeRSVP <noreply@example.com>";
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: payload.to,
-      subject: payload.subject,
-      text: payload.text,
-    }),
+  const result = await deliverEmail({
+    to: payload.to,
+    subject: payload.subject,
+    text: payload.text,
+    html: payload.html,
+    eventId: payload.eventId,
   });
-  if (!res.ok) {
-    console.error("[SpokeRSVP] Resend error", res.status, await res.text());
-  }
-  return { stubbed: false };
+  return { stubbed: result.stubbed };
 }
 
 /**

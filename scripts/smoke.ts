@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import { pacificWallToUtc, utcToPacificParts } from "../src/lib/time";
 import { newId, newSecretToken, newShareToken } from "../src/lib/ids";
 import { closeDb, getClient, getDb } from "../src/lib/db";
-import { eventTypes, events, hosts, rsvps, waiverSignatures, waiverVersions } from "../src/lib/db/schema";
+import { eventTypes, events, hosts, invitations, rsvps, waiverSignatures, waiverVersions } from "../src/lib/db/schema";
 import { autoPromoteWaitlist, getEventCounts, submitRsvp } from "../src/lib/rsvp-service";
 import {
   HostAdminError,
@@ -34,6 +34,16 @@ import {
   unsignedWaiverForEvent,
 } from "../src/lib/waivers";
 import { parseVillageFilter, toggleVillageHref, villageFilterHref } from "../src/lib/villages";
+import {
+  eventsAvailableToImport,
+  findInvitationByToken,
+  inviteBlockReason,
+  listImportPeople,
+  markInvitationOpened,
+  parseInviteList,
+  upsertInvitations,
+} from "../src/lib/invitations";
+import { configuredEmailProvider } from "../src/lib/mailer";
 
 config();
 
@@ -299,6 +309,8 @@ function villageFilters() {
   assert.equal(toggleVillageHref(["Novato", "Tiburon"], "Tiburon"), "/?villages=Novato");
   assert.equal(toggleVillageHref(["Novato"], "Ross Valley"), "/?villages=Novato%2CRoss%20Valley");
   assert.equal(safeMemberReturnPath("/my-events"), "/my-events");
+  assert.equal(safeMemberReturnPath("/invite/abcDEF123_-tokenvalue"), "/invite/abcDEF123_-tokenvalue");
+  assert.equal(safeMemberReturnPath("/invite/short"), "/");
   assert.equal(safeMemberReturnPath("/my-events?ok=done"), "/my-events");
   assert.equal(
     safeMemberReturnPath("/waiver/sign?eventId=11111111-1111-4111-8111-111111111111"),
@@ -447,6 +459,202 @@ async function waiverRules() {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+async function inviteFlow() {
+  const parsed = parseInviteList("Ada@Example.com, ada@example.com\nnot-an-email; bob@example.com bob@example.com");
+  assert.deepEqual(parsed.emails, ["ada@example.com", "bob@example.com"]);
+  assert.deepEqual(parsed.invalid, ["not-an-email"]);
+  assert.equal(configuredEmailProvider(), "outbox");
+
+  const millHost = { role: "sub_admin" as const, village: "Mill Valley" };
+  const admin = { role: "admin" as const, village: null };
+  const catalog = [
+    { id: "mill", village: "Mill Valley" },
+    { id: "tiburon", village: "Tiburon" },
+    { id: "current", village: "Mill Valley" },
+  ];
+  assert.deepEqual(
+    eventsAvailableToImport(millHost, "current", catalog).map((event) => event.id),
+    ["mill"],
+  );
+  assert.deepEqual(
+    eventsAvailableToImport(admin, "current", catalog).map((event) => event.id).sort(),
+    ["mill", "tiburon"],
+  );
+
+  const now = new Date("2026-09-29T12:00:00.000Z");
+  assert.equal(inviteBlockReason({ status: "cancelled", startsAt: new Date("2026-12-01T17:00:00.000Z") }, now), "cancelled");
+  assert.equal(inviteBlockReason({ status: "published", startsAt: new Date("2026-09-01T17:00:00.000Z") }, now), "past");
+  assert.equal(inviteBlockReason({ status: "published", startsAt: new Date("2026-12-01T17:00:00.000Z") }, now), null);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spoke-invite-"));
+  process.env.DATABASE_URL = `file:${path.join(dir, "spoke.db")}`;
+  delete process.env.DATABASE_AUTH_TOKEN;
+  closeDb();
+  const db = await getDb();
+  const created = new Date("2026-09-01T12:00:00.000Z");
+  const hostId = newId();
+  await db
+    .insert(hosts)
+    .values({
+      id: hostId,
+      email: "host@example.com",
+      passwordHash: "x",
+      name: "Host",
+      role: "sub_admin",
+      village: "Mill Valley",
+      createdAt: created,
+    })
+    .run();
+  const social = await db.select().from(eventTypes).where(eq(eventTypes.name, SOCIAL_TYPE_NAME)).get();
+  const futureId = newId();
+  const pastId = newId();
+  const tiburonId = newId();
+  await db
+    .insert(events)
+    .values([
+      {
+        id: futureId,
+        hostId,
+        eventTypeId: social!.id,
+        title: "Future coffee",
+        description: "",
+        startsAt: pacificWallToUtc("2026-12-01", "10:00"),
+        endsAt: null,
+        locationName: "Cafe",
+        streetAddress: null,
+        capacity: 8,
+        carpoolsEnabled: false,
+        status: "published",
+        village: "Mill Valley",
+        shareToken: newShareToken(),
+        createdAt: created,
+        updatedAt: created,
+      },
+      {
+        id: pastId,
+        hostId,
+        eventTypeId: social!.id,
+        title: "Past coffee",
+        description: "",
+        startsAt: pacificWallToUtc("2026-01-01", "10:00"),
+        endsAt: null,
+        locationName: "Cafe",
+        streetAddress: null,
+        capacity: 8,
+        carpoolsEnabled: false,
+        status: "published",
+        village: "Mill Valley",
+        shareToken: newShareToken(),
+        createdAt: created,
+        updatedAt: created,
+      },
+      {
+        id: tiburonId,
+        hostId,
+        eventTypeId: social!.id,
+        title: "Tiburon social",
+        description: "",
+        startsAt: pacificWallToUtc("2026-12-02", "10:00"),
+        endsAt: null,
+        locationName: "Library",
+        streetAddress: null,
+        capacity: 8,
+        carpoolsEnabled: false,
+        status: "published",
+        village: "Tiburon",
+        shareToken: newShareToken(),
+        createdAt: created,
+        updatedAt: created,
+      },
+    ])
+    .run();
+
+  await db
+    .insert(rsvps)
+    .values({
+      id: newId(),
+      eventId: pastId,
+      guestName: "Pat Lee",
+      email: "pat@example.com",
+      phone: null,
+      status: "going",
+      waitlistOrder: null,
+      manageToken: newSecretToken(18),
+      createdAt: created,
+      updatedAt: created,
+    })
+    .run();
+  await db
+    .insert(rsvps)
+    .values({
+      id: newId(),
+      eventId: futureId,
+      guestName: "Already There",
+      email: "already@example.com",
+      phone: null,
+      status: "going",
+      waitlistOrder: null,
+      manageToken: newSecretToken(18),
+      createdAt: created,
+      updatedAt: created,
+    })
+    .run();
+
+  const imported = await listImportPeople(pastId, futureId, false);
+  assert.equal(imported.length, 1);
+  assert.equal(imported[0]?.email, "pat@example.com");
+  assert.equal("answers" in (imported[0] || {}), false);
+  const storedEvents = await db.select().from(events).all();
+  const millOnly = eventsAvailableToImport(
+    { role: "sub_admin", village: "Mill Valley" },
+    futureId,
+    storedEvents,
+  ).map((event) => event.village);
+  assert.ok(millOnly.every((village) => village === "Mill Valley"));
+  assert.equal(millOnly.includes("Tiburon" as never), false);
+
+  const first = await upsertInvitations(futureId, [
+    { email: "Pat@Example.com", name: "Pat Lee" },
+    { email: "already@example.com", name: "Already There" },
+    { email: "new@example.com" },
+  ]);
+  assert.deepEqual(first.added, ["pat@example.com", "new@example.com"]);
+  assert.deepEqual(first.skippedRegistered, ["already@example.com"]);
+  const again = await upsertInvitations(futureId, [{ email: "pat@example.com", name: "Pat Lee" }]);
+  assert.deepEqual(again.updated, ["pat@example.com"]);
+  assert.equal(again.added.length, 0);
+  const rows = await db.select().from(invitations).where(eq(invitations.eventId, futureId)).all();
+  assert.equal(rows.length, 2);
+
+  const pat = rows.find((row) => row.email === "pat@example.com");
+  assert.ok(pat);
+  assert.equal(await findInvitationByToken("not-a-real-token"), null);
+  const opened = await findInvitationByToken(pat!.token);
+  assert.equal(opened?.invitation.email, "pat@example.com");
+  assert.equal(opened?.event.title, "Future coffee");
+  await markInvitationOpened(opened!.invitation);
+  const afterOpen = await findInvitationByToken(pat!.token);
+  assert.equal(afterOpen?.invitation.status, "opened");
+
+  const pastEvent = storedEvents.find((event) => event.id === pastId)!;
+  assert.equal(inviteBlockReason(pastEvent, now), "past");
+  const futureEvent = storedEvents.find((event) => event.id === futureId)!;
+  const joined = await submitRsvp(futureEvent, {
+    guestName: "Pat Lee",
+    email: "pat@example.com",
+    desiredStatus: "going",
+  });
+  assert.equal(joined.rsvp.status, "going");
+  const registered = await findInvitationByToken(pat!.token);
+  assert.equal(registered?.invitation.status, "registered");
+  await markInvitationOpened(registered!.invitation);
+  const stillRegistered = await findInvitationByToken(pat!.token);
+  assert.equal(stillRegistered?.invitation.status, "registered");
+
+  closeDb();
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 async function main() {
   roundtripPacific();
   villageFilters();
@@ -455,6 +663,7 @@ async function main() {
   await hostRoleMigration();
   await rsvpFlow();
   await waiverRules();
+  await inviteFlow();
   console.log("smoke ok");
 }
 

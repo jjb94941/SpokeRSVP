@@ -3,6 +3,7 @@ import { getDb } from "./db";
 import { carpools, events, rsvps, type CarpoolRole, type CarpoolRow, type EventRow, type RsvpRow } from "./db/schema";
 import { newId, newSecretToken } from "./ids";
 import { normalizeEmail, normalizePhone } from "./format";
+import { markInvitationRegistered } from "./invitations";
 import { sendEmail, sendSmsTodo, waitlistPromotedText } from "./notify";
 import { formatPacificRange } from "./time";
 
@@ -258,6 +259,10 @@ export async function submitRsvp(
     await upsertCarpool(result.id, input.carpoolRole || "none", input.seats, input.carpoolNote);
   } else if (result.status !== "going") {
     await upsertCarpool(result.id, "none", null, null);
+  }
+
+  if ((result.status === "going" || result.status === "waitlist") && result.email) {
+    await markInvitationRegistered(event.id, result.email);
   }
 
   return { rsvp: result, previousStatus };

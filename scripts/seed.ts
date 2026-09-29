@@ -4,9 +4,11 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { closeDb, fileUrlToPath, getDb, resolveDatabaseUrl, wipeData } from "../src/lib/db";
 import { BOOK_TYPE_NAME, SOCIAL_TYPE_NAME, WALK_TYPE_NAME } from "../src/lib/event-catalog";
-import { carpools, eventTypes, events, hosts, rsvps } from "../src/lib/db/schema";
+import { invitationEmail } from "../src/lib/invitations";
+import { carpools, eventTypes, events, hosts, invitations, outboxMessages, rsvps } from "../src/lib/db/schema";
 import { newId, newSecretToken, newShareToken } from "../src/lib/ids";
-import { pacificWallToUtc } from "../src/lib/time";
+import { formatPacificRange, pacificWallToUtc } from "../src/lib/time";
+import { villageTitle } from "../src/lib/villages";
 
 config();
 
@@ -239,6 +241,66 @@ async function main() {
   await addRsvp(bookId, "Quinn Ellis", "waitlist", { email: "quinn@example.com", waitlistOrder: 1 });
   await addRsvp(bookId, "Rita Hoffman", "waitlist", { email: "rita@example.com", waitlistOrder: 2 });
 
+  const jordanToken = newSecretToken(24);
+  const inviteMessage = "We saved you a seat in the conversation. Come if you can.";
+  await db
+    .insert(invitations)
+    .values([
+      {
+        id: newId(),
+        eventId: bookId,
+        email: "sam.neighbor@example.com",
+        name: "Sam Neighbor",
+        token: newSecretToken(24),
+        status: "not_sent",
+        message: "",
+        createdAt: now,
+        updatedAt: now,
+        sentAt: null,
+        openedAt: null,
+        registeredAt: null,
+      },
+      {
+        id: newId(),
+        eventId: bookId,
+        email: "jordan.lee@example.com",
+        name: "Jordan Lee",
+        token: jordanToken,
+        status: "sent",
+        message: inviteMessage,
+        createdAt: now,
+        updatedAt: now,
+        sentAt: now,
+        openedAt: null,
+        registeredAt: null,
+      },
+    ])
+    .run();
+  const bookEvent = await db.select().from(events).where(eq(events.id, bookId)).get();
+  const origin = process.env.APP_URL || "http://localhost:3000";
+  const jordanMail = invitationEmail({
+    name: "Jordan Lee",
+    eventTitle: bookEvent!.title,
+    village: bookEvent!.village,
+    when: formatPacificRange(bookEvent!.startsAt.getTime(), bookEvent!.endsAt?.getTime()),
+    where: bookEvent!.locationName,
+    message: inviteMessage,
+    registerUrl: `${origin}/invite/${jordanToken}`,
+  });
+  await db
+    .insert(outboxMessages)
+    .values({
+      id: newId(),
+      toEmail: "jordan.lee@example.com",
+      subject: jordanMail.subject,
+      textBody: jordanMail.text,
+      htmlBody: jordanMail.html,
+      eventId: bookId,
+      provider: "outbox",
+      createdAt: now,
+    })
+    .run();
+
   const hike = await db.select().from(events).where(eq(events.id, hikeId)).get();
   const coffee = await db.select().from(events).where(eq(events.id, coffeeId)).get();
   const book = await db.select().from(events).where(eq(events.id, bookId)).get();
@@ -260,6 +322,8 @@ async function main() {
   console.log(`  Walkers:  /e/${hike?.shareToken}`);
   console.log(`  Coffee:   /e/${coffee?.shareToken}`);
   console.log(`  Book club:/e/${book?.shareToken}`);
+  console.log(`  Book club invitation: /invite/${jordanToken}`);
+  console.log(`Village on that invitation: ${villageTitle(bookEvent!.village)}`);
 }
 
 main()

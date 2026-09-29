@@ -42,7 +42,7 @@ function waiverSignPath(eventId: string): string {
   return `/waiver/sign?eventId=${encodeURIComponent(eventId)}`;
 }
 
-async function finishMemberRsvp(event: EventRow, email: string, returnTo: string, guestName?: string): Promise<never> {
+export async function finishMemberRsvp(event: EventRow, email: string, returnTo: string, guestName?: string): Promise<never> {
   const db = await getDb();
   const existing = (await db.select().from(rsvps).where(eq(rsvps.eventId, event.id)).all()).find(
     (row) => normalizeEmail(row.email) === email,
