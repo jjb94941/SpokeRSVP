@@ -42,7 +42,7 @@ export default async function HostEventPage({
       for (const row of [...going, ...waitlist]) {
         const email = normalizeEmail(row.rsvp.email);
         if (!email) continue;
-        const answers = await latestAnswersForWaiver(waiver.id, email);
+        const answers = await latestAnswersForWaiver(waiver.waiverId, email);
         if (!answers) continue;
         waiverAnswers.push({ name: row.rsvp.guestName, email, answers });
       }

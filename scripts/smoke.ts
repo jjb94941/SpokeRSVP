@@ -28,6 +28,7 @@ import {
   assertWaiverFieldCount,
   canViewWaiverAnswers,
   collectWaiverAnswers,
+  latestAnswersForWaiver,
   needsWaiverSignature,
   parseStoredFields,
   unsignedWaiverForEvent,
@@ -405,11 +406,14 @@ async function waiverRules() {
       version: required!.version,
       email,
       signerName: "Neighbor Person",
-      answersJson: "[]",
+      answersJson: JSON.stringify(collected),
       signedAt: now,
     })
     .run();
   assert.equal(await unsignedWaiverForEvent(walk!.id, email), null, "an existing signature skips the waiver");
+  const stored = await latestAnswersForWaiver(required!.waiverId, email);
+  assert.equal(stored?.find((answer) => answer.fieldId === "emergency-contact-name")?.value, "Pat Lee");
+  assert.equal(await latestAnswersForWaiver(required!.id, email), null, "answers are stored on the waiver, not the version id");
 
   const currentFields = parseStoredFields(required!.fieldsJson);
   assert.equal(currentFields.length, 4);
