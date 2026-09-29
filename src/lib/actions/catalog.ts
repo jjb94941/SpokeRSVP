@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/roles";
 import { getDb } from "@/lib/db";
 import { eventTypes, waiverVersions, waivers } from "@/lib/db/schema";
 import { newId } from "@/lib/ids";
-import { appendWaiverVersion } from "@/lib/waivers";
+import { appendWaiverVersion, readWaiverFields } from "@/lib/waivers";
 
 const PAGE = "/host/event-types";
 
@@ -75,13 +75,19 @@ export async function createWaiver(formData: FormData) {
   const body = String(formData.get("body") || "").trim();
   if (title.length < 3) fail("Enter a waiver title.");
   if (body.length < 40) fail("Enter the full waiver text neighbors will read.");
+  let fields;
+  try {
+    fields = readWaiverFields(formData);
+  } catch (error) {
+    fail((error as Error).message);
+  }
   const db = await getDb();
   const now = new Date();
   const waiverId = newId();
   await db.insert(waivers).values({ id: waiverId, title, createdAt: now }).run();
   await db
     .insert(waiverVersions)
-    .values({ id: newId(), waiverId, version: 1, title, body, createdAt: now })
+    .values({ id: newId(), waiverId, version: 1, title, body, fieldsJson: JSON.stringify(fields), createdAt: now })
     .run();
   done(`Created ${title}, version 1.`);
 }
@@ -90,7 +96,12 @@ export async function saveWaiverVersion(formData: FormData) {
   await requireAdmin("Only super-administrators can manage event types and waivers.");
   const waiverId = String(formData.get("waiverId") || "");
   try {
-    const saved = await appendWaiverVersion(waiverId, String(formData.get("title") || ""), String(formData.get("body") || ""));
+    const saved = await appendWaiverVersion(
+      waiverId,
+      String(formData.get("title") || ""),
+      String(formData.get("body") || ""),
+      readWaiverFields(formData),
+    );
     if (!saved.createdNew) done(`Updated the title of ${saved.version.title}. Existing signatures still count.`);
     done(
       `Saved ${saved.version.title}, version ${saved.version.version}. Neighbors sign this version the next time they register. People already signed up stay signed up.`,

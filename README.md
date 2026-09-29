@@ -122,7 +122,7 @@ You can also run reminders manually: `POST` or `GET` `/api/reminders` with `Auth
 - **Hosts** sign in with email/password or a magic link. **Super-administrators** can view and manage events in every Marin Villages community and appoint village hosts at `/host/admins`. **Village hosts** are assigned to one of Tiburon, Mill Valley, Novato, San Rafael, Twin Cities, or Ross Valley, and can manage every event for that village only. Existing events stay Mill Valley when the village column is added.
 - **Guests** open `/e/<token>` with **no account**. They RSVP with name plus phone **or** email: Going, not going, or waitlist when the event is full. Changing from Going to not going opens that seat again. A host can promote the next waiting neighbor.
 - **Members** use the public events page with email only (no password). They can filter by village, sign up, and cancel with **Cancel my planned attendance at** the event name. **My events** lists every signup across villages, and the same cancel wording works there. Cancelling restores the open-seat count from before that signup.
-- **Event types and waivers** are managed by super-administrators at `/host/event-types`. Each event has one type. A type can have one waiver. The first time a neighbor registers for that type, they read the waiver, check that they agree, and type their full name. Later registrations skip it until the waiver text changes and a new version is saved. People already signed up are not removed. Village hosts can choose a type but cannot edit types or waivers.
+- **Event types and waivers** are managed by super-administrators at `/host/event-types`. Each event has one type. A type can have one waiver, and each waiver version can include up to four questions (a label, optional help text, required or optional, single line or a larger box). The first time a neighbor registers for that type, they read the waiver, answer those questions, check that they agree, and type their full name. Later registrations skip it until the waiver text or questions change and a new version is saved. People already signed up are not removed. Answers stay with that signature. They are shown to super-administrators and to the host of the village for the event the neighbor joined. They are not on public pages or in the CSV download. Village hosts can choose a type but cannot edit types or waivers.
 - **Carpools** (when enabled): offer seats or need a ride. Visible to Going guests (first names) and the host (full contact).
 - **Email**: confirmation, waitlist promotion, and reminders go through [Resend](https://resend.com) when `RESEND_API_KEY` is set. Otherwise they are **logged** (local stub). Magic links work the same way.
 - **SMS**: not implemented (`TODO` in `src/lib/notify.ts` and `npm run reminders`).
@@ -149,7 +149,7 @@ Then open [http://localhost:3000](http://localhost:3000).
 1. The header says **Marin Villages**. Host home lists events from every village, including Mill Valley ones. **Manage hosts** is in the header.
 2. Open **Manage hosts**. Appoint a host: name, email, **one village** (try Tiburon), and an optional temporary password. The password is shown once.
 3. Confirm you cannot remove or demote the last super-administrator (yourself).
-4. Open **Event types**. Walk/Hike has the liability waiver. Social and Book club do not. Archive is available, and saving changed waiver text creates a new version. Signatures stay listed under the waiver.
+4. Open **Event types**. Walk/Hike has the liability waiver and four questions (emergency contact name and phone required, blood type optional, allergies optional). Social and Book club do not. Archive is available. Saving changed waiver text or questions creates a new version. Signatures, including answers, stay listed under the waiver.
 
 **As a village host** — sign out, then sign in as `volunteer@millvalleyvillage.org` / `millvalley`:
 
@@ -160,7 +160,7 @@ Then open [http://localhost:3000](http://localhost:3000).
 **As a member** — stay signed out of the host account and open [http://localhost:3000](http://localhost:3000):
 
 1. Enter an email and choose **Continue with email**. No password.
-2. Sign up for a walk. The first time, read the waiver, check that you agree, and type your full name. A later signup for another walk skips the waiver until a super-administrator saves a new version. A coffee or book club event has no waiver.
+2. Sign up for a walk. The first time, read the waiver, fill in the questions, check that you agree, and type your full name. A later signup for another walk skips the waiver until a super-administrator saves a new version. A coffee or book club event has no waiver.
 3. Cancel. The card offers **Sign up** again, and the open-seat count matches the number from before that signup.
 4. Open **My events**. It lists every event that email joined, in any village, and marks waitlist spots. Cancel from there as well. With no signups, the page says you are not signed up yet.
 
@@ -187,7 +187,7 @@ This is a **village pilot**, not a production membership system.
 
 - Guest contact information is for the **event host**, not a public directory.
 - Optional street addresses on events are **host-only**.
-- Do not store medical, financial, or other sensitive records here.
+- Waiver answers such as emergency contacts or health notes are visible only to super-administrators and the host of the village whose event the neighbor registered for. They are stored with the signature in the local database and are omitted from the guest CSV. Do not treat this pilot as a medical-records system.
 - There is no Helpful Village sync. Volunteer matching stays in Helpful Village.
 - Back up the Turso database (or the local `data/spoke.db` file) if you rely on the lists.
 - **Change the demo host password before production.** Never commit API keys, Turso tokens, or `REMINDER_SECRET`. Review auth, HTTPS, backups, and a real email sending domain before neighbors depend on the site.

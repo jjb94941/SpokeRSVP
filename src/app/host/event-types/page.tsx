@@ -11,6 +11,7 @@ import { getDb } from "@/lib/db";
 import { eventTypes, waiverSignatures, waiverVersions, waivers } from "@/lib/db/schema";
 import { requireAdmin } from "@/lib/roles";
 import { formatPacificRange } from "@/lib/time";
+import { parseStoredAnswers, parseStoredFields, type WaiverField } from "@/lib/waivers";
 
 export default async function EventTypesPage({
   searchParams,
@@ -36,8 +37,9 @@ export default async function EventTypesPage({
       <h1 className="font-display mt-2 text-4xl leading-tight font-semibold">Event types and waivers</h1>
       <p className="mt-3 max-w-3xl text-[17px] text-ink">
         Every event has one type. A type can have one waiver. Neighbors sign the current version before they
-        register, including when the event is full. Changing the waiver text starts a new version. Old signatures
-        stay on record, and people already signed up are not removed.
+        register, including when the event is full. Changing the waiver text or its questions starts a new version.
+        Old signatures stay on record, and people already signed up are not removed. A waiver can have up to four
+        questions.
       </p>
       <Flash ok={params.ok} error={params.error} />
 
@@ -157,6 +159,7 @@ export default async function EventTypesPage({
             rows={8}
             className="w-full rounded-[14px] border-2 border-card-border bg-white px-4 py-3 text-[17px] leading-relaxed text-ink"
           />
+          <WaiverFieldInputs prefix="new" fields={[]} />
           <button type="submit" className="btn-secondary mt-4">
             Create waiver
           </button>
@@ -199,6 +202,7 @@ export default async function EventTypesPage({
                     defaultValue={current?.body || ""}
                     className="w-full rounded-[14px] border-2 border-card-border bg-white px-4 py-3 text-[17px] leading-relaxed text-ink"
                   />
+                  <WaiverFieldInputs prefix={waiver.id} fields={parseStoredFields(current?.fieldsJson)} />
                   <button type="submit" className="btn-secondary mt-4">
                     Save new version of {waiver.title}
                   </button>
@@ -212,6 +216,7 @@ export default async function EventTypesPage({
                       <li key={row.id} className="inset-row text-[17px] text-ink">
                         <span className="font-bold">{row.signerName}</span> · {row.email} · version {row.version} ·{" "}
                         {formatPacificRange(row.signedAt.getTime())}
+                        <WaiverAnswerList answers={parseStoredAnswers(row.answersJson)} />
                       </li>
                     ))}
                   </ul>
@@ -227,5 +232,61 @@ export default async function EventTypesPage({
         </ul>
       </section>
     </main>
+  );
+}
+
+function WaiverFieldInputs({ prefix, fields }: { prefix: string; fields: WaiverField[] }) {
+  return (
+    <div className="mt-4 grid gap-4">
+      <p className="text-[17px] font-bold text-ink">Questions (up to 4)</p>
+      {[0, 1, 2, 3].map((index) => {
+        const field = fields[index];
+        return (
+          <fieldset key={`${prefix}-${index}`} className="rounded-[14px] border-2 border-card-border p-4">
+            <legend className="px-2 text-[17px] font-bold text-ink">Question {index + 1}</legend>
+            <input type="hidden" name={`fieldId${index}`} value={field?.id || ""} />
+            <label htmlFor={`${prefix}-label-${index}`} className="mb-2 block text-[17px] font-bold text-ink">
+              Label
+            </label>
+            <input
+              id={`${prefix}-label-${index}`}
+              name={`fieldLabel${index}`}
+              defaultValue={field?.label || ""}
+              className="w-full min-h-14 rounded-[14px] border-2 border-card-border bg-white px-4 text-[17px] text-ink"
+            />
+            <label htmlFor={`${prefix}-help-${index}`} className="mb-2 mt-4 block text-[17px] font-bold text-ink">
+              Help text (optional)
+            </label>
+            <input
+              id={`${prefix}-help-${index}`}
+              name={`fieldHelp${index}`}
+              defaultValue={field?.help || ""}
+              className="w-full min-h-14 rounded-[14px] border-2 border-card-border bg-white px-4 text-[17px] text-ink"
+            />
+            <label className="mt-4 flex min-h-14 items-center gap-3 text-[17px] font-bold text-ink">
+              <input type="checkbox" name={`fieldRequired${index}`} defaultChecked={field?.required} className="h-6 w-6 accent-teal" />
+              Required
+            </label>
+            <label className="flex min-h-14 items-center gap-3 text-[17px] font-bold text-ink">
+              <input type="checkbox" name={`fieldMultiline${index}`} defaultChecked={field?.multiline} className="h-6 w-6 accent-teal" />
+              Larger text box
+            </label>
+          </fieldset>
+        );
+      })}
+    </div>
+  );
+}
+
+function WaiverAnswerList({ answers }: { answers: { label: string; value: string }[] }) {
+  if (answers.length === 0) return null;
+  return (
+    <ul className="mt-2 grid gap-1">
+      {answers.map((answer) => (
+        <li key={answer.label}>
+          <span className="font-bold">{answer.label}:</span> {answer.value || "Not answered"}
+        </li>
+      ))}
+    </ul>
   );
 }

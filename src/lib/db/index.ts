@@ -159,6 +159,7 @@ export async function ensureSchema(client?: Client) {
       version INTEGER NOT NULL,
       title TEXT NOT NULL,
       body TEXT NOT NULL,
+      fields_json TEXT NOT NULL DEFAULT '[]',
       created_at INTEGER NOT NULL,
       UNIQUE (waiver_id, version)
     );
@@ -170,6 +171,7 @@ export async function ensureSchema(client?: Client) {
       version INTEGER NOT NULL,
       email TEXT NOT NULL,
       signer_name TEXT NOT NULL,
+      answers_json TEXT NOT NULL DEFAULT '[]',
       signed_at INTEGER NOT NULL,
       UNIQUE (waiver_version_id, email)
     );
@@ -231,6 +233,7 @@ export async function ensureSchema(client?: Client) {
   await ensureHostRoleColumn(target);
   await ensureVillageColumns(target);
   await ensureEventTypeColumn(target);
+  await ensureWaiverFieldColumns(target);
 }
 
 function columnName(row: Record<string, unknown>): string {
@@ -269,6 +272,17 @@ async function ensureVillageColumns(client: Client) {
   await client.execute(
     `UPDATE hosts SET village = 'Mill Valley' WHERE role = 'sub_admin' AND (village IS NULL OR village NOT IN (${allowed}))`,
   );
+}
+
+async function ensureWaiverFieldColumns(client: Client) {
+  const versions = await client.execute("PRAGMA table_info(waiver_versions)");
+  if (!versions.rows.some((row) => columnName(row as Record<string, unknown>) === "fields_json")) {
+    await client.execute("ALTER TABLE waiver_versions ADD COLUMN fields_json TEXT NOT NULL DEFAULT '[]'");
+  }
+  const signatures = await client.execute("PRAGMA table_info(waiver_signatures)");
+  if (!signatures.rows.some((row) => columnName(row as Record<string, unknown>) === "answers_json")) {
+    await client.execute("ALTER TABLE waiver_signatures ADD COLUMN answers_json TEXT NOT NULL DEFAULT '[]'");
+  }
 }
 
 async function ensureEventTypeColumn(client: Client) {

@@ -11,7 +11,7 @@ import { sendEmail, rsvpConfirmationText } from "@/lib/notify";
 import { submitRsvp } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
 import { safeMemberReturnPath } from "@/lib/member-path";
-import { isFullSignerName, unsignedWaiverForEvent } from "@/lib/waivers";
+import { collectWaiverAnswers, isFullSignerName, unsignedWaiverForEvent, parseStoredFields } from "@/lib/waivers";
 
 function memberReturnPath(formData: FormData): string {
   return safeMemberReturnPath(String(formData.get("returnTo") || "/"));
@@ -126,6 +126,12 @@ export async function signWaiverAndRegister(formData: FormData) {
   if (String(formData.get("versionId") || "") !== needed.id) {
     emailError(back, "This waiver was updated. Please read the new version and sign it.");
   }
+  let answers;
+  try {
+    answers = collectWaiverAnswers(parseStoredFields(needed.fieldsJson), formData);
+  } catch (error) {
+    emailError(back, (error as Error).message);
+  }
 
   try {
     await db
@@ -137,6 +143,7 @@ export async function signWaiverAndRegister(formData: FormData) {
         version: needed.version,
         email,
         signerName,
+        answersJson: JSON.stringify(answers),
         signedAt: new Date(),
       })
       .run();

@@ -3,6 +3,7 @@ import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { eventTypes, events, waiverVersions, waivers } from "./db/schema";
 import * as schema from "./db/schema";
 import { newId } from "./ids";
+import type { WaiverField } from "./waivers";
 
 export const WALK_TYPE_NAME = "Walk/Hike";
 export const SOCIAL_TYPE_NAME = "Social";
@@ -24,7 +25,38 @@ I accept the ordinary risks of walking and hiking outdoors. I will not hold Mari
 
 If I am injured, I will seek the care I need and contact the host as soon as I can.
 
-This waiver is for this local village pilot. It is not medical advice. Signing it does not cancel any event I have already joined. If this text changes, I will be asked to sign the new version before I register for another walk or hike.`;
+This waiver is for this local village pilot. It is not medical advice. Signing it does not cancel any event I have already joined. If this text or the questions change, I will be asked to sign the new version before I register for another walk or hike.`;
+
+export const WALK_WAIVER_FIELDS: WaiverField[] = [
+  {
+    id: "emergency-contact-name",
+    label: "Emergency contact name",
+    help: "Someone we can call if you need help.",
+    required: true,
+    multiline: false,
+  },
+  {
+    id: "emergency-contact-phone",
+    label: "Emergency contact phone",
+    help: "A phone number for that person.",
+    required: true,
+    multiline: false,
+  },
+  {
+    id: "blood-type",
+    label: "Blood type",
+    help: "Optional. Leave blank if you do not know it.",
+    required: false,
+    multiline: false,
+  },
+  {
+    id: "allergies",
+    label: "Allergies",
+    help: "Optional. Include foods or medicines the host should know about.",
+    required: false,
+    multiline: true,
+  },
+];
 
 type Db = LibSQLDatabase<typeof schema>;
 
@@ -55,6 +87,7 @@ export async function ensureEventCatalog(database: Db) {
         version: 1,
         title: WALK_WAIVER_TITLE,
         body: WALK_WAIVER_BODY,
+        fieldsJson: JSON.stringify(WALK_WAIVER_FIELDS),
         createdAt: now,
       })
       .run();

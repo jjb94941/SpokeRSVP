@@ -7,9 +7,10 @@ import { cancelEvent, hostPromote, restoreEvent } from "@/lib/actions/events";
 import { appUrl } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { hosts } from "@/lib/db/schema";
-import { firstName, formatPhoneDisplay } from "@/lib/format";
+import { firstName, formatPhoneDisplay, normalizeEmail } from "@/lib/format";
 import { findManagedEvent, isAdmin } from "@/lib/roles";
 import { getEventCounts, listRsvps, type RsvpListRow } from "@/lib/rsvp-service";
+import { canViewWaiverAnswers, currentWaiverForType, latestAnswersForWaiver, type WaiverAnswer } from "@/lib/waivers";
 import { formatPacificRange } from "@/lib/time";
 import { villageTitle } from "@/lib/villages";
 
@@ -34,6 +35,19 @@ export default async function HostEventPage({
   const notGoing = rows.filter((row) => row.rsvp.status === "not_going");
   const carpoolRows = going.filter((row) => row.carpool && row.carpool.role !== "none");
   const shareUrl = `${await appUrl()}/e/${event.shareToken}`;
+  const waiverAnswers: { name: string; email: string; answers: WaiverAnswer[] }[] = [];
+  if (canViewWaiverAnswers(host, event.village)) {
+    const waiver = await currentWaiverForType(event.eventTypeId);
+    if (waiver) {
+      for (const row of [...going, ...waitlist]) {
+        const email = normalizeEmail(row.rsvp.email);
+        if (!email) continue;
+        const answers = await latestAnswersForWaiver(waiver.id, email);
+        if (!answers) continue;
+        waiverAnswers.push({ name: row.rsvp.guestName, email, answers });
+      }
+    }
+  }
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
@@ -90,6 +104,33 @@ export default async function HostEventPage({
       <GuestSection title={`Going (${going.length})`}>
         <GuestTable rows={going} showCarpool empty="No one is going yet." />
       </GuestSection>
+
+      {canViewWaiverAnswers(host, event.village) ? (
+        <GuestSection title="Waiver answers">
+          <p className="meta-line mb-4">
+            Emergency contacts and health notes stay on this host page. They are not shown on the public events list.
+          </p>
+          {waiverAnswers.length === 0 ? (
+            <p className="text-[17px] text-ink">No waiver answers for this event yet.</p>
+          ) : (
+            <ul className="grid gap-3">
+              {waiverAnswers.map((guest) => (
+                <li key={guest.email} className="inset-row">
+                  <p className="text-[17px] font-bold text-ink">{guest.name}</p>
+                  <p className="meta-line">{guest.email}</p>
+                  <ul className="mt-2 grid gap-1 text-[17px] text-ink">
+                    {guest.answers.map((answer) => (
+                      <li key={answer.fieldId}>
+                        <span className="font-bold">{answer.label}:</span> {answer.value || "Not answered"}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          )}
+        </GuestSection>
+      ) : null}
 
       <GuestSection title={`Waitlist (${waitlist.length})`}>
         {waitlist.length === 0 ? (

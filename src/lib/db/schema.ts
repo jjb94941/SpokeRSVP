@@ -46,6 +46,8 @@ export const waiverVersions = sqliteTable(
     version: integer("version").notNull(),
     title: text("title").notNull(),
     body: text("body").notNull(),
+    /** JSON array of up to 4 fields for this version. */
+    fieldsJson: text("fields_json").notNull().default("[]"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [uniqueIndex("waiver_versions_waiver_version_idx").on(table.waiverId, table.version)],
@@ -64,6 +66,8 @@ export const waiverSignatures = sqliteTable(
     version: integer("version").notNull(),
     email: text("email").notNull(),
     signerName: text("signer_name").notNull(),
+    /** JSON answers for this version’s fields. Not shown on public pages. */
+    answersJson: text("answers_json").notNull().default("[]"),
     signedAt: integer("signed_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [uniqueIndex("waiver_signatures_version_email_idx").on(table.waiverVersionId, table.email)],

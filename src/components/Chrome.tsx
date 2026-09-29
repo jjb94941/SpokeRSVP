@@ -115,8 +115,8 @@ export function SiteFooter() {
         </p>
         <p className="mt-2">
           Guest names and contact details are visible to the event host. Street addresses on events stay
-          private unless the host shares them. This is a local pilot; do not use it for medical, financial, or
-          other sensitive records.
+          private unless the host shares them. Waiver answers such as emergency contacts or health notes are
+          visible only to super-administrators and your event&apos;s host.
         </p>
       </div>
     </footer>

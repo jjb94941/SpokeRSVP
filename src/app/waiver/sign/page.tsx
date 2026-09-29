@@ -10,7 +10,7 @@ import { safeMemberReturnPath } from "@/lib/member-path";
 import { getEventCounts } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
 import { villageTitle } from "@/lib/villages";
-import { unsignedWaiverForEvent } from "@/lib/waivers";
+import { parseStoredFields, unsignedWaiverForEvent } from "@/lib/waivers";
 
 export default async function SignWaiverPage({
   searchParams,
@@ -97,6 +97,31 @@ export default async function SignWaiverPage({
                 <div className="card mt-4 max-h-[28rem] overflow-y-auto whitespace-pre-wrap text-[17px] leading-relaxed text-ink">
                   {waiver.body}
                 </div>
+                {parseStoredFields(waiver.fieldsJson).map((field) => (
+                  <div key={field.id} className="mt-5">
+                    <label htmlFor={`field_${field.id}`} className="mb-2 block text-[17px] font-bold text-ink">
+                      {field.label}
+                      {field.required ? <span className="text-terracotta"> (required)</span> : <span className="font-semibold text-muted"> (optional)</span>}
+                    </label>
+                    {field.help ? <p className="meta-line mb-2">{field.help}</p> : null}
+                    {field.multiline ? (
+                      <textarea
+                        id={`field_${field.id}`}
+                        name={`field_${field.id}`}
+                        required={field.required}
+                        rows={4}
+                        className="w-full rounded-[14px] border-2 border-card-border bg-white px-4 py-3 text-[17px] leading-relaxed text-ink"
+                      />
+                    ) : (
+                      <input
+                        id={`field_${field.id}`}
+                        name={`field_${field.id}`}
+                        required={field.required}
+                        className="w-full min-h-14 rounded-[14px] border-2 border-card-border bg-white px-4 text-[17px] text-ink"
+                      />
+                    )}
+                  </div>
+                ))}
                 <label className="mt-6 flex min-h-14 items-start gap-3 rounded-[14px] border-2 border-card-border bg-card px-4 py-3 text-[17px] font-bold text-ink">
                   <input type="checkbox" name="agree" value="yes" required className="mt-1 h-6 w-6 accent-teal" />
                   <span>I have read this waiver and I agree.</span>

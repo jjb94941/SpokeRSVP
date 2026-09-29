@@ -20,9 +20,18 @@ import {
   parseNewSubAdmin,
 } from "../src/lib/roles";
 import { APP_VERSION, appVersionLabel } from "../src/lib/version";
-import { BOOK_TYPE_NAME, SOCIAL_TYPE_NAME, WALK_TYPE_NAME, WALK_WAIVER_BODY } from "../src/lib/event-catalog";
+import { BOOK_TYPE_NAME, SOCIAL_TYPE_NAME, WALK_TYPE_NAME, WALK_WAIVER_BODY, WALK_WAIVER_FIELDS } from "../src/lib/event-catalog";
 import { safeMemberReturnPath } from "../src/lib/member-path";
-import { appendWaiverVersion, assertCanManageCatalog, needsWaiverSignature, unsignedWaiverForEvent } from "../src/lib/waivers";
+import {
+  appendWaiverVersion,
+  assertCanManageCatalog,
+  assertWaiverFieldCount,
+  canViewWaiverAnswers,
+  collectWaiverAnswers,
+  needsWaiverSignature,
+  parseStoredFields,
+  unsignedWaiverForEvent,
+} from "../src/lib/waivers";
 import { parseVillageFilter, toggleVillageHref, villageFilterHref } from "../src/lib/villages";
 
 config();
@@ -316,6 +325,18 @@ async function waiverRules() {
   assert.equal(needsWaiverSignature("version-1", null), true);
   assert.equal(needsWaiverSignature("version-1", "version-1"), false);
   assert.equal(needsWaiverSignature("version-2", "version-1"), true);
+  assert.throws(() => assertWaiverFieldCount(5), /at most 4 fields/);
+  assert.equal(WALK_WAIVER_FIELDS.length, 4);
+  assert.throws(() => collectWaiverAnswers(WALK_WAIVER_FIELDS, new FormData()), /Enter Emergency contact name/);
+  const answered = new FormData();
+  answered.set("field_emergency-contact-name", "Pat Lee");
+  answered.set("field_emergency-contact-phone", "415-555-0100");
+  const collected = collectWaiverAnswers(WALK_WAIVER_FIELDS, answered);
+  assert.equal(collected.find((answer) => answer.fieldId === "allergies")?.value, "");
+  assert.equal(canViewWaiverAnswers(null, "Mill Valley"), false);
+  assert.equal(canViewWaiverAnswers({ role: "sub_admin", village: "Tiburon" }, "Mill Valley"), false);
+  assert.equal(canViewWaiverAnswers({ role: "sub_admin", village: "Mill Valley" }, "Mill Valley"), true);
+  assert.equal(canViewWaiverAnswers({ role: "admin", village: null }, "Tiburon"), true);
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spoke-waiver-"));
   process.env.DATABASE_URL = `file:${path.join(dir, "spoke.db")}`;
@@ -384,21 +405,36 @@ async function waiverRules() {
       version: required!.version,
       email,
       signerName: "Neighbor Person",
+      answersJson: "[]",
       signedAt: now,
     })
     .run();
   assert.equal(await unsignedWaiverForEvent(walk!.id, email), null, "an existing signature skips the waiver");
 
-  const next = await appendWaiverVersion(required!.waiverId, required!.title, `${WALK_WAIVER_BODY}\n\nUpdated trail notice.`);
+  const currentFields = parseStoredFields(required!.fieldsJson);
+  assert.equal(currentFields.length, 4);
+  const next = await appendWaiverVersion(
+    required!.waiverId,
+    required!.title,
+    `${WALK_WAIVER_BODY}\n\nUpdated trail notice.`,
+    currentFields,
+  );
   assert.equal(next.createdNew, true);
   assert.equal(next.version.version, 2);
+  const requiredFields = currentFields.map((field) =>
+    field.id === "blood-type" ? { ...field, required: true } : field,
+  );
+  const fieldVersion = await appendWaiverVersion(required!.waiverId, required!.title, next.version.body, requiredFields);
+  assert.equal(fieldVersion.createdNew, true, "changing a field creates a new waiver version");
+  assert.equal(fieldVersion.version.version, 3);
+  assert.equal(parseStoredFields(next.version.fieldsJson).find((field) => field.id === "blood-type")?.required, false);
   const resign = await unsignedWaiverForEvent(walk!.id, email);
   assert.ok(resign, "a new waiver version must be signed before the next registration");
-  assert.equal(resign!.version, 2);
+  assert.equal(resign!.version, 3);
   const kept = await db.select().from(rsvps).where(eq(rsvps.id, joined.rsvp.id)).get();
   assert.equal(kept?.status, "going", "a new waiver version does not cancel an existing registration");
   const versions = await db.select().from(waiverVersions).where(eq(waiverVersions.waiverId, required!.waiverId)).all();
-  assert.equal(versions.length, 2);
+  assert.equal(versions.length, 3);
   const signatures = await db.select().from(waiverSignatures).all();
   assert.equal(signatures.length, 1);
   assert.equal(signatures[0]?.version, 1);
