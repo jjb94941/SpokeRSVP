@@ -113,9 +113,7 @@ export default async function MyEventsPage({
                       <input type="hidden" name="returnTo" value={RETURN_TO} />
                       <input type="hidden" name="eventId" value={event.id} />
                       <button type="submit" className="btn-secondary">
-                        {rsvp.status === "waitlist"
-                          ? `Leave the waitlist for ${event.title}`
-                          : `Cancel signup for ${event.title}`}
+                        {`Cancel my planned attendance at ${event.title}`}
                       </button>
                     </form>
                   </li>

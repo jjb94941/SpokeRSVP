@@ -121,7 +121,7 @@ You can also run reminders manually: `POST` or `GET` `/api/reminders` with `Auth
 
 - **Hosts** sign in with email/password or a magic link. **Super-administrators** can view and manage events in every Marin Villages community and appoint village hosts at `/host/admins`. **Village hosts** are assigned to one of Tiburon, Mill Valley, Novato, San Rafael, Twin Cities, or Ross Valley, and can manage every event for that village only. Existing events stay Mill Valley when the village column is added.
 - **Guests** open `/e/<token>` with **no account**. They RSVP with name plus phone **or** email: Going, not going, or waitlist when the event is full. Changing from Going to not going **auto-promotes** the next waitlisted neighbor.
-- **Members** use the public events page with email only (no password). They can filter by village, sign up, and cancel that signup or leave the waitlist from the same list. **My events** lists every signup and waitlist spot across villages, and cancel works there too. Cancelling a Going signup still promotes the next waitlisted neighbor.
+- **Members** use the public events page with email only (no password). They can filter by village, sign up, and cancel with **Cancel my planned attendance at** the event name. **My events** lists every signup across villages, and the same cancel wording works there. Cancelling a Going signup still promotes the next person when the event was full.
 - **Carpools** (when enabled): offer seats or need a ride. Visible to Going guests (first names) and the host (full contact).
 - **Email**: confirmation, waitlist promotion, and reminders go through [Resend](https://resend.com) when `RESEND_API_KEY` is set. Otherwise they are **logged** (local stub). Magic links work the same way.
 - **SMS**: not implemented (`TODO` in `src/lib/notify.ts` and `npm run reminders`).
@@ -158,7 +158,7 @@ Then open [http://localhost:3000](http://localhost:3000).
 **As a member** — stay signed out of the host account and open [http://localhost:3000](http://localhost:3000):
 
 1. Enter an email and choose **Continue with email**. No password.
-2. Sign up for an event. That card says you are signed up and shows **Cancel signup**. A full event says you are on the waitlist and shows **Leave the waitlist**.
+2. Sign up for an event. That card says you are signed up and shows **Cancel my planned attendance at** the event name.
 3. Cancel. The card offers **Sign up** again, and a freed seat goes to the next person on the waitlist.
 4. Open **My events**. It lists every event that email joined, in any village, and marks waitlist spots. Cancel from there as well. With no signups, the page says you are not signed up yet.
 
