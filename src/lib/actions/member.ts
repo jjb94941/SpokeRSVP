@@ -9,13 +9,10 @@ import { normalizeEmail } from "@/lib/format";
 import { sendEmail, rsvpConfirmationText } from "@/lib/notify";
 import { submitRsvp } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
-import { villageFilterHref, parseVillageFilter } from "@/lib/villages";
+import { safeMemberReturnPath } from "@/lib/member-path";
 
 function memberReturnPath(formData: FormData): string {
-  const raw = String(formData.get("returnTo") || "/");
-  if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
-  const villages = parseVillageFilter(new URL(raw, "http://localhost").searchParams.get("villages") || "");
-  return villageFilterHref(villages);
+  return safeMemberReturnPath(String(formData.get("returnTo") || "/"));
 }
 
 function emailError(returnTo: string, message: string): never {

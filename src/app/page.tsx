@@ -48,20 +48,25 @@ export default async function HomePage({
         <p className="text-lg font-semibold tracking-wide text-teal">Marin Villages</p>
         <h1 className="font-display mt-2 max-w-3xl text-4xl leading-tight font-semibold">Village events</h1>
         <p className="mt-3 max-w-2xl text-[17px] text-ink">
-          See gatherings across the villages, or choose the ones you want. Sign up with your email, and cancel the same way. No password.
+          See gatherings across the villages, or choose the ones you want. Sign up with your email, and cancel the same way. No password. My events lists every gathering you joined.
         </p>
         <Flash ok={params.ok} error={params.error} />
 
         {memberEmail ? (
-          <form action={signOutMember} className="mt-6 flex flex-wrap items-center gap-3">
-            <input type="hidden" name="returnTo" value={returnTo} />
-            <p className="meta-line">
-              Signed in as <span className="font-bold text-ink">{memberEmail}</span>
-            </p>
-            <button type="submit" className="btn-secondary">
-              Use a different email
-            </button>
-          </form>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <form action={signOutMember} className="flex flex-wrap items-center gap-3">
+              <input type="hidden" name="returnTo" value={returnTo} />
+              <p className="meta-line">
+                Signed in as <span className="font-bold text-ink">{memberEmail}</span>
+              </p>
+              <button type="submit" className="btn-secondary">
+                Use a different email
+              </button>
+            </form>
+            <Link href="/my-events" className="btn-teal">
+              My events
+            </Link>
+          </div>
         ) : (
           <form action={signInMember} className="card mt-6 max-w-xl">
             <input type="hidden" name="returnTo" value={returnTo} />

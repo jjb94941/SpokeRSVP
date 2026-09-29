@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { logout } from "@/lib/actions/auth";
-import { getCurrentHost } from "@/lib/auth";
+import { getCurrentHost, getMemberEmail } from "@/lib/auth";
 import { isAdmin } from "@/lib/roles";
 import { appVersionLabel } from "@/lib/version";
 import { SpokeMark } from "./SpokeMark";
@@ -18,6 +18,7 @@ export async function SiteHeader({
   villageLabel?: string | null;
 }) {
   const sessionHost = variant === "public" ? await getCurrentHost() : null;
+  const memberEmail = variant === "public" && !sessionHost ? await getMemberEmail() : null;
   const signedInName = hostName || sessionHost?.name;
   const showAdminNav = isAdminUser || (sessionHost ? isAdmin(sessionHost) : false);
 
@@ -75,6 +76,11 @@ export async function SiteHeader({
               <Link href="/" className="rounded-lg px-3 py-2 font-semibold underline-offset-4 hover:underline">
                 Upcoming events
               </Link>
+              {memberEmail ? (
+                <Link href="/my-events" className="rounded-lg px-3 py-2 font-semibold underline-offset-4 hover:underline">
+                  My events
+                </Link>
+              ) : null}
               <Link href="/login" className="rounded-lg bg-cream/15 px-4 py-2 font-semibold">
                 Host sign in
               </Link>

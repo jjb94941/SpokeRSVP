@@ -20,6 +20,7 @@ import {
   parseNewSubAdmin,
 } from "../src/lib/roles";
 import { APP_VERSION, appVersionLabel } from "../src/lib/version";
+import { safeMemberReturnPath } from "../src/lib/member-path";
 import { parseVillageFilter, toggleVillageHref, villageFilterHref } from "../src/lib/villages";
 
 config();
@@ -222,6 +223,11 @@ function villageFilters() {
   assert.equal(toggleVillageHref([], "Novato"), "/?villages=Novato");
   assert.equal(toggleVillageHref(["Novato", "Tiburon"], "Tiburon"), "/?villages=Novato");
   assert.equal(toggleVillageHref(["Novato"], "Ross Valley"), "/?villages=Novato%2CRoss%20Valley");
+  assert.equal(safeMemberReturnPath("/my-events"), "/my-events");
+  assert.equal(safeMemberReturnPath("/my-events?ok=done"), "/my-events");
+  assert.equal(safeMemberReturnPath("/?villages=Tiburon,Nope"), "/?villages=Tiburon");
+  assert.equal(safeMemberReturnPath("//evil.example"), "/");
+  assert.equal(safeMemberReturnPath("https://evil.example/my-events"), "/");
 }
 
 function versionLabel() {
