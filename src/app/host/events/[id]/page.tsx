@@ -4,13 +4,14 @@ import { eq } from "drizzle-orm";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { InvitationsPanel } from "@/components/InvitationsPanel";
 import { Flash } from "@/components/Ui";
-import { cancelEvent, hostPromote, restoreEvent } from "@/lib/actions/events";
+import { cancelEvent, deleteEvent, hostPromote, restoreEvent } from "@/lib/actions/events";
 import { appUrl } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events, hosts } from "@/lib/db/schema";
 import { firstName, formatPhoneDisplay, normalizeEmail } from "@/lib/format";
 import { findManagedEvent, isAdmin } from "@/lib/roles";
 import { getEventCounts, listRsvps, type RsvpListRow } from "@/lib/rsvp-service";
+import { canPermanentlyDeleteEvent, eventIsPast } from "@/lib/event-lifecycle";
 import {
   eventsAvailableToImport,
   inviteBlockReason,
@@ -26,7 +27,7 @@ export default async function HostEventPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ ok?: string; error?: string; importEvent?: string; waitlist?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; importEvent?: string; waitlist?: string; confirm?: string }>;
 }) {
   const { id } = await params;
   const q = await searchParams;
@@ -36,6 +37,7 @@ export default async function HostEventPage({
   const db = await getDb();
   const creator = await db.select().from(hosts).where(eq(hosts.id, event.hostId)).get();
   const counts = await getEventCounts(event);
+  const past = eventIsPast(event, new Date());
   const rows = await listRsvps(event.id);
   const going = rows.filter((row) => row.rsvp.status === "going");
   const waitlist = rows.filter((row) => row.rsvp.status === "waitlist");
@@ -182,13 +184,17 @@ export default async function HostEventPage({
                 <p className="meta-line">
                   {rsvp.email || "—"} · {rsvp.phone ? formatPhoneDisplay(rsvp.phone) : "—"}
                 </p>
-                <form action={hostPromote} className="mt-3">
-                  <input type="hidden" name="eventId" value={event.id} />
-                  <input type="hidden" name="rsvpId" value={rsvp.id} />
-                  <button type="submit" className="btn-primary">
-                    Promote {firstName(rsvp.guestName)} to Going
-                  </button>
-                </form>
+                {past ? (
+                  <p className="meta-line mt-2">This event has ended, so the waitlist is closed.</p>
+                ) : (
+                  <form action={hostPromote} className="mt-3">
+                    <input type="hidden" name="eventId" value={event.id} />
+                    <input type="hidden" name="rsvpId" value={rsvp.id} />
+                    <button type="submit" className="btn-primary">
+                      Promote {firstName(rsvp.guestName)} to Going
+                    </button>
+                  </form>
+                )}
               </li>
             ))}
           </ul>
@@ -222,32 +228,101 @@ export default async function HostEventPage({
         <GuestTable rows={notGoing} empty="No one has said they cannot go." />
       </GuestSection>
 
-      <section className="card mt-8">
-        {event.status === "cancelled" ? (
-          <form action={restoreEvent}>
-            <input type="hidden" name="id" value={event.id} />
-            <button type="submit" className="btn-secondary">
-              Restore this event
-            </button>
-          </form>
-        ) : (
-          <form action={cancelEvent}>
-            <h2 className="font-display mb-3 text-2xl">Cancel event</h2>
-            <p className="meta-line mb-3">
-              The RSVP page will tell guests the gathering is cancelled. Existing RSVPs stay in the list.
-            </p>
-            <label className="mb-4 flex items-center gap-3 text-lg">
-              <input type="checkbox" name="confirm" value="yes" className="h-6 w-6 accent-terracotta" />
-              Yes, cancel this event
-            </label>
-            <input type="hidden" name="id" value={event.id} />
-            <button type="submit" className="btn-primary">
-              Cancel event
-            </button>
-          </form>
-        )}
-      </section>
+      <RemoveEventPanel
+        eventId={event.id}
+        title={event.title}
+        status={event.status}
+        past={past}
+        going={counts.going}
+        waitlist={counts.waitlist}
+        notGoing={counts.notGoing}
+        confirming={q.confirm === "delete"}
+      />
     </main>
+  );
+}
+
+function RemoveEventPanel({
+  eventId,
+  title,
+  status,
+  past,
+  going,
+  waitlist,
+  notGoing,
+  confirming,
+}: {
+  eventId: string;
+  title: string;
+  status: "published" | "cancelled";
+  past: boolean;
+  going: number;
+  waitlist: number;
+  notGoing: number;
+  confirming: boolean;
+}) {
+  const deletable = canPermanentlyDeleteEvent({ going, waitlist, notGoing });
+  const people =
+    going === 0 && waitlist === 0
+      ? "No one is registered or on the waitlist."
+      : `${going} ${going === 1 ? "person is" : "people are"} registered and ${waitlist} ${waitlist === 1 ? "is" : "are"} on the waitlist.`;
+  return (
+    <section id="remove-event" className="card mt-8">
+      <h2 className="font-display text-2xl">Delete event</h2>
+      <p className="mt-2 text-[17px] text-ink">{people}</p>
+      {notGoing > 0 ? (
+        <p className="meta-line mt-1">{notGoing} said they are not going. Those responses stay unless the event is empty.</p>
+      ) : null}
+      {!confirming ? (
+        <a href={`/host/events/${eventId}?confirm=delete#remove-event`} className="btn-danger mt-4">
+          Delete event
+        </a>
+      ) : deletable ? (
+        <form action={deleteEvent} className="mt-4 rounded-[14px] border-2 border-terracotta bg-white p-4">
+          <p className="text-[17px] text-ink">
+            Permanently delete {title}? This cannot be undone. Waiver signatures are kept with the waiver, not this
+            event.
+          </p>
+          <label className="mt-4 flex min-h-14 items-center gap-3 text-[17px] font-bold text-ink">
+            <input type="checkbox" name="confirm" value="yes" className="h-6 w-6 accent-terracotta" />
+            Yes, permanently delete this event
+          </label>
+          <input type="hidden" name="id" value={eventId} />
+          <button type="submit" className="btn-danger mt-3">
+            Delete event
+          </button>
+        </form>
+      ) : (
+        <div className="mt-4 rounded-[14px] border-2 border-terracotta bg-white p-4">
+          <p className="text-[17px] text-ink">
+            Permanent delete is not available while anyone is registered, waitlisted, or marked not going.
+            {past
+              ? " This gathering has ended, so it stays in Past events with the guest list and waiver answers."
+              : " Cancel it instead. The guest list stays, invitation links stop working, and members see it as cancelled in My events. Waiver signatures stay with the waiver."}
+          </p>
+          {!past && status !== "cancelled" ? (
+            <form action={cancelEvent} className="mt-4">
+              <label className="flex min-h-14 items-center gap-3 text-[17px] font-bold text-ink">
+                <input type="checkbox" name="confirm" value="yes" className="h-6 w-6 accent-terracotta" />
+                Yes, cancel this event
+              </label>
+              <input type="hidden" name="id" value={eventId} />
+              <button type="submit" className="btn-danger mt-3">
+                Cancel event
+              </button>
+            </form>
+          ) : null}
+        </div>
+      )}
+      {status === "cancelled" && !past ? (
+        <form action={restoreEvent} className="mt-4">
+          <input type="hidden" name="id" value={eventId} />
+          <button type="submit" className="btn-secondary">
+            Restore this event
+          </button>
+        </form>
+      ) : null}
+    </section>
   );
 }
 

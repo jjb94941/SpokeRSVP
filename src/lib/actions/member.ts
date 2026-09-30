@@ -11,6 +11,7 @@ import { sendEmail, rsvpConfirmationText } from "@/lib/notify";
 import { submitRsvp } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
 import { safeMemberReturnPath } from "@/lib/member-path";
+import { eventIsPast } from "@/lib/event-lifecycle";
 import { collectWaiverAnswers, isFullSignerName, unsignedWaiverForEvent, parseStoredFields } from "@/lib/waivers";
 
 function memberReturnPath(formData: FormData): string {
@@ -92,7 +93,7 @@ export async function memberRsvp(formData: FormData) {
   const eventId = String(formData.get("eventId") || "");
   const db = await getDb();
   const event = await db.select().from(events).where(eq(events.id, eventId)).get();
-  if (!event || event.status !== "published") {
+  if (!event || event.status !== "published" || eventIsPast(event, new Date())) {
     emailError(returnTo, "That event is not open for sign-up.");
   }
 
@@ -110,7 +111,7 @@ export async function signWaiverAndRegister(formData: FormData) {
 
   const db = await getDb();
   const event = await db.select().from(events).where(eq(events.id, eventId)).get();
-  if (!event || event.status !== "published") {
+  if (!event || event.status !== "published" || eventIsPast(event, new Date())) {
     emailError(returnTo, "That event is not open for sign-up.");
   }
 
@@ -164,6 +165,9 @@ export async function memberCancelRsvp(formData: FormData) {
   const db = await getDb();
   const event = await db.select().from(events).where(eq(events.id, eventId)).get();
   if (!event) emailError(returnTo, "That event could not be found.");
+  if (eventIsPast(event, new Date())) {
+    emailError(returnTo, "This event has already ended, so cancellation is closed.");
+  }
 
   const existing = (await db.select().from(rsvps).where(eq(rsvps.eventId, event.id)).all()).find(
     (row) => normalizeEmail(row.email) === email && row.status !== "not_going",

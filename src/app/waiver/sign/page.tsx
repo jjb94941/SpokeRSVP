@@ -10,6 +10,7 @@ import { safeMemberReturnPath } from "@/lib/member-path";
 import { getEventCounts } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
 import { villageTitle } from "@/lib/villages";
+import { eventIsPast } from "@/lib/event-lifecycle";
 import { parseStoredFields, unsignedWaiverForEvent } from "@/lib/waivers";
 
 export default async function SignWaiverPage({
@@ -36,7 +37,7 @@ export default async function SignWaiverPage({
         <h1 className="font-display mt-2 text-4xl leading-tight font-semibold">Sign the waiver</h1>
         <Flash ok={params.ok} error={params.error} />
 
-        {!event || event.status !== "published" ? (
+        {!event || event.status !== "published" || eventIsPast(event, new Date()) ? (
           <div className="card mt-6">
             <p className="text-[17px] text-ink">That event is not open for sign-up.</p>
             <Link href="/" className="btn-primary mt-4">

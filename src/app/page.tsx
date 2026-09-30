@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { SiteFooter, SiteHeader } from "@/components/Chrome";
 import { Flash } from "@/components/Ui";
 import { memberCancelRsvp, memberRsvp, signInMember, signOutMember } from "@/lib/actions/member";
@@ -7,6 +7,7 @@ import { getMemberEmail } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { eventTypes, events, rsvps } from "@/lib/db/schema";
 import { normalizeEmail } from "@/lib/format";
+import { eventIsPast } from "@/lib/event-lifecycle";
 import { getEventCounts } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
 import { unsignedWaiverForEvent } from "@/lib/waivers";
@@ -22,8 +23,9 @@ export default async function HomePage({
   const memberEmail = await getMemberEmail();
   const returnTo = villageFilterHref(selected);
   const db = await getDb();
-  const published = (await db.select().from(events).orderBy(desc(events.startsAt)).all())
-    .filter((event) => event.status === "published")
+  const now = new Date();
+  const published = (await db.select().from(events).all())
+    .filter((event) => event.status === "published" && !eventIsPast(event, now))
     .filter((event) => selected.length === 0 || selected.includes(event.village as (typeof VILLAGES)[number]))
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
   const eventIds = published.map((event) => event.id);

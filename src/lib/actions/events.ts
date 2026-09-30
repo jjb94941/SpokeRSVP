@@ -11,7 +11,8 @@ import { newId, newShareToken } from "@/lib/ids";
 import { findManagedEvent, isAdmin } from "@/lib/roles";
 import { isVillage } from "@/lib/villages";
 import { pacificWallToUtc } from "@/lib/time";
-import { promoteRsvp } from "@/lib/rsvp-service";
+import { eventIsPast, permanentlyDeleteEvent } from "@/lib/event-lifecycle";
+import { getEventCounts, promoteRsvp } from "@/lib/rsvp-service";
 
 const eventSchema = z.object({
   title: z.string().trim().min(3, "Please enter a title."),
@@ -142,6 +143,9 @@ export async function cancelEvent(formData: FormData) {
   }
   const managed = await findManagedEvent(id);
   if (!managed) redirect("/host");
+  if (eventIsPast(managed.event, new Date())) {
+    redirect(`/host/events/${id}?error=` + encodeURIComponent("This event has already ended. It stays in Past events."));
+  }
   const db = await getDb();
   await db
     .update(events)
@@ -164,11 +168,39 @@ export async function restoreEvent(formData: FormData) {
   redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event is open again."));
 }
 
+export async function deleteEvent(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  const confirm = String(formData.get("confirm") || "");
+  if (confirm !== "yes") {
+    redirect(`/host/events/${id}?confirm=delete&error=` + encodeURIComponent("Check the box to confirm you want to delete this event."));
+  }
+  const managed = await findManagedEvent(id);
+  if (!managed) redirect("/host");
+  const counts = await getEventCounts(managed.event);
+  if (counts.going + counts.waitlist + counts.notGoing > 0) {
+    redirect(
+      `/host/events/${id}?confirm=delete&error=` +
+        encodeURIComponent(
+          `${counts.going} registered and ${counts.waitlist} waitlisted. Cancel the event instead of deleting it.`,
+        ),
+    );
+  }
+  try {
+    await permanentlyDeleteEvent(id);
+  } catch (error) {
+    redirect(`/host/events/${id}?confirm=delete&error=` + encodeURIComponent((error as Error).message));
+  }
+  redirect("/host?ok=" + encodeURIComponent(`${managed.event.title} was deleted.`));
+}
+
 export async function hostPromote(formData: FormData) {
   const eventId = String(formData.get("eventId") || "");
   const rsvpId = String(formData.get("rsvpId") || "");
   const managed = await findManagedEvent(eventId);
   if (!managed) redirect("/host");
+  if (eventIsPast(managed.event, new Date())) {
+    redirect(`/host/events/${eventId}?error=` + encodeURIComponent("This event has already ended, so the waitlist is closed."));
+  }
   try {
     await promoteRsvp(rsvpId, await appUrl());
   } catch (error) {

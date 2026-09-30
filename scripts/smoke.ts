@@ -9,6 +9,13 @@ import { pacificWallToUtc, utcToPacificParts } from "../src/lib/time";
 import { newId, newSecretToken, newShareToken } from "../src/lib/ids";
 import { closeDb, getClient, getDb } from "../src/lib/db";
 import { eventTypes, events, hosts, invitations, rsvps, waiverSignatures, waiverVersions } from "../src/lib/db/schema";
+import {
+  assertCanDeleteEvent,
+  canPermanentlyDeleteEvent,
+  eventIsPast,
+  partitionEvents,
+  permanentlyDeleteEvent,
+} from "../src/lib/event-lifecycle";
 import { autoPromoteWaitlist, getEventCounts, submitRsvp } from "../src/lib/rsvp-service";
 import {
   HostAdminError,
@@ -85,7 +92,7 @@ async function rsvpFlow() {
       eventTypeId: social.id,
       title: "Test hike",
       description: "",
-      startsAt: pacificWallToUtc("2026-09-16", "10:00"),
+      startsAt: pacificWallToUtc("2027-06-16", "10:00"),
       endsAt: null,
       locationName: "Old Mill Park",
       streetAddress: "375 Throckmorton Ave",
@@ -147,7 +154,7 @@ async function rsvpFlow() {
       eventTypeId: social.id,
       title: "Open seats",
       description: "",
-      startsAt: pacificWallToUtc("2026-10-02", "10:00"),
+      startsAt: pacificWallToUtc("2027-06-20", "10:00"),
       endsAt: null,
       locationName: "Park",
       streetAddress: null,
@@ -384,7 +391,7 @@ async function waiverRules() {
       eventTypeId: walk!.id,
       title: "Dawn hike",
       description: "",
-      startsAt: pacificWallToUtc("2026-10-04", "09:00"),
+      startsAt: pacificWallToUtc("2027-06-18", "09:00"),
       endsAt: null,
       locationName: "Trailhead",
       streetAddress: null,
@@ -655,6 +662,150 @@ async function inviteFlow() {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+function scheduleRules() {
+  const during = {
+    startsAt: pacificWallToUtc("2026-09-30", "10:00"),
+    endsAt: pacificWallToUtc("2026-09-30", "15:00"),
+  };
+  assert.equal(eventIsPast(during, pacificWallToUtc("2026-09-30", "13:00")), false);
+  assert.equal(eventIsPast(during, pacificWallToUtc("2026-09-30", "15:01")), true);
+  assert.equal(
+    eventIsPast({ startsAt: pacificWallToUtc("2026-09-30", "10:00"), endsAt: null }, pacificWallToUtc("2026-09-30", "10:01")),
+    true,
+  );
+  const sooner = { title: "Soon", startsAt: pacificWallToUtc("2026-10-02", "10:00"), endsAt: null };
+  const later = { title: "Later", startsAt: pacificWallToUtc("2026-11-02", "10:00"), endsAt: null };
+  const ended = { title: "Ended", startsAt: pacificWallToUtc("2026-01-02", "10:00"), endsAt: null };
+  const parts = partitionEvents([later, ended, sooner], pacificWallToUtc("2026-09-30", "12:00"));
+  assert.deepEqual(
+    parts.upcoming.map((event) => event.title),
+    ["Soon", "Later"],
+  );
+  assert.deepEqual(
+    parts.past.map((event) => event.title),
+    ["Ended"],
+  );
+  assert.equal(canPermanentlyDeleteEvent({ going: 0, waitlist: 0, notGoing: 0 }), true);
+  assert.equal(canPermanentlyDeleteEvent({ going: 1, waitlist: 0, notGoing: 0 }), false);
+  assert.equal(canPermanentlyDeleteEvent({ going: 0, waitlist: 2, notGoing: 0 }), false);
+  const mill = { role: "sub_admin" as const, village: "Mill Valley" };
+  assert.doesNotThrow(() => assertCanDeleteEvent({ role: "admin", village: null }, { village: "Tiburon" }, { going: 0, waitlist: 0, notGoing: 0 }));
+  assert.throws(() => assertCanDeleteEvent(mill, { village: "Tiburon" }, { going: 0, waitlist: 0, notGoing: 0 }), /your village/);
+  assert.throws(
+    () => assertCanDeleteEvent(mill, { village: "Mill Valley" }, { going: 1, waitlist: 0, notGoing: 0 }),
+    /cannot be deleted/,
+  );
+}
+
+async function deleteKeepsWaivers() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spoke-delete-"));
+  process.env.DATABASE_URL = `file:${path.join(dir, "spoke.db")}`;
+  delete process.env.DATABASE_AUTH_TOKEN;
+  closeDb();
+  const db = await getDb();
+  const now = new Date("2026-09-01T12:00:00.000Z");
+  const hostId = newId();
+  await db
+    .insert(hosts)
+    .values({
+      id: hostId,
+      email: "host@example.com",
+      passwordHash: "x",
+      name: "Host",
+      role: "admin",
+      createdAt: now,
+    })
+    .run();
+  const social = await db.select().from(eventTypes).where(eq(eventTypes.name, SOCIAL_TYPE_NAME)).get();
+  const walk = await db.select().from(eventTypes).where(eq(eventTypes.name, WALK_TYPE_NAME)).get();
+  const version = await db.select().from(waiverVersions).where(eq(waiverVersions.waiverId, walk!.waiverId!)).get();
+  assert.ok(version);
+  await db
+    .insert(waiverSignatures)
+    .values({
+      id: newId(),
+      waiverId: version!.waiverId,
+      waiverVersionId: version!.id,
+      version: version!.version,
+      email: "ada@example.com",
+      signerName: "Ada Neighbor",
+      answersJson: "[]",
+      signedAt: now,
+    })
+    .run();
+  const emptyId = newId();
+  const busyId = newId();
+  await db
+    .insert(events)
+    .values([
+      {
+        id: emptyId,
+        hostId,
+        eventTypeId: social!.id,
+        title: "Empty social",
+        description: "",
+        startsAt: pacificWallToUtc("2027-07-01", "10:00"),
+        endsAt: null,
+        locationName: "Park",
+        streetAddress: null,
+        capacity: 8,
+        carpoolsEnabled: false,
+        status: "published",
+        village: "Mill Valley",
+        shareToken: newShareToken(),
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: busyId,
+        hostId,
+        eventTypeId: social!.id,
+        title: "Busy social",
+        description: "",
+        startsAt: pacificWallToUtc("2026-01-15", "10:00"),
+        endsAt: pacificWallToUtc("2026-01-15", "12:00"),
+        locationName: "Park",
+        streetAddress: null,
+        capacity: 8,
+        carpoolsEnabled: false,
+        status: "published",
+        village: "Mill Valley",
+        shareToken: newShareToken(),
+        createdAt: now,
+        updatedAt: now,
+      },
+    ])
+    .run();
+  await db
+    .insert(rsvps)
+    .values({
+      id: newId(),
+      eventId: busyId,
+      guestName: "Ada Neighbor",
+      email: "ada@example.com",
+      phone: null,
+      status: "going",
+      waitlistOrder: null,
+      manageToken: newSecretToken(18),
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+  const busy = (await db.select().from(events).where(eq(events.id, busyId)).get())!;
+  await assert.rejects(
+    () => submitRsvp(busy, { guestName: "Bea", email: "bea@example.com", desiredStatus: "going" }),
+    /already ended/,
+  );
+  await assert.rejects(() => permanentlyDeleteEvent(busyId), /cannot be deleted/);
+  assert.ok(await db.select().from(events).where(eq(events.id, busyId)).get());
+  await permanentlyDeleteEvent(emptyId);
+  assert.equal(await db.select().from(events).where(eq(events.id, emptyId)).get(), undefined);
+  assert.equal((await db.select().from(waiverSignatures).all()).length, 1);
+
+  closeDb();
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 async function main() {
   roundtripPacific();
   villageFilters();
@@ -664,6 +815,8 @@ async function main() {
   await rsvpFlow();
   await waiverRules();
   await inviteFlow();
+  scheduleRules();
+  await deleteKeepsWaivers();
   console.log("smoke ok");
 }
 

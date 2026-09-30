@@ -8,6 +8,8 @@ Village hosts belong to one Marin Villages community (Tiburon, Mill Valley, Nova
 
 Members sign up from the public events list with email only. After they are signed up, that card says **Cancel my planned attendance at** the event. **My events** lists every signup across villages and uses the same cancel action. Cancelling restores the open-seat count from before that signup.
 
+Upcoming lists hide an event after its Pacific end time and sort the ones still ahead soonest first. Past gatherings stay on My events in a collapsed section, and hosts can open them from Past events. An event with no responses can be permanently deleted. An event with registrations is cancelled instead, which keeps the guest list and waiver signatures.
+
 Hosts can invite people from an event dashboard. Paste emails or import registrants from another event in their village (super-administrators can import from any village). Each invitation is a private link that prefills the email and uses the normal registration flow. The pilot stores those emails in an Outbox instead of sending them.
 
 Every event has an event type. Super-administrators manage types and waivers at `/host/event-types`. A type may have one waiver, and each waiver version may include up to four questions. Neighbors answer those questions, agree, and type their full name before registering, including when the event is full. Signing the current version once is enough until the waiver text or questions change. Existing registrations stay in place. Answers are visible only to super-administrators and the host of that event’s village.

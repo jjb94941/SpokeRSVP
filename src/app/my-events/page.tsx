@@ -7,6 +7,7 @@ import { memberCancelRsvp, signInMember, signOutMember } from "@/lib/actions/mem
 import { getMemberEmail } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events, rsvps, type EventRow, type RsvpRow } from "@/lib/db/schema";
+import { eventIsPast } from "@/lib/event-lifecycle";
 import { normalizeEmail } from "@/lib/format";
 import { formatPacificRange } from "@/lib/time";
 import { villageTitle } from "@/lib/villages";
@@ -25,6 +26,9 @@ export default async function MyEventsPage({
   const params = await searchParams;
   const memberEmail = await getMemberEmail();
   const registrations = memberEmail ? await listMemberRegistrations(memberEmail) : [];
+  const now = new Date();
+  const upcoming = registrations.filter((row) => !eventIsPast(row.event, now));
+  const past = registrations.filter((row) => eventIsPast(row.event, now));
 
   return (
     <>
@@ -46,7 +50,7 @@ export default async function MyEventsPage({
             <button type="submit" className="btn-secondary">
               Use a different email
             </button>
-            {registrations.length > 0 ? (
+            {upcoming.length > 0 || past.length > 0 ? (
               <Link href="/" className="btn-secondary">
                 See village events
               </Link>
@@ -77,49 +81,35 @@ export default async function MyEventsPage({
         {memberEmail ? (
           <section className="mt-8">
             <h2 className="font-display text-[28px] font-bold">
-              {registrations.length === 0
-                ? "No signups yet"
-                : registrations.length === 1
-                  ? "1 event"
-                  : `${registrations.length} events`}
+              {upcoming.length === 0 ? "No upcoming signups" : upcoming.length === 1 ? "1 upcoming event" : `${upcoming.length} upcoming events`}
             </h2>
-            {registrations.length === 0 ? (
+            {upcoming.length === 0 ? (
               <div className="card mt-5">
-                <p className="text-[17px] text-ink">You are not signed up for any events yet.</p>
-                <p className="mt-2 text-[17px] text-ink">
-                  Choose a village gathering, then come back here to see it or cancel.
-                </p>
+                <p className="text-[17px] text-ink">You are not signed up for an upcoming event.</p>
+                <p className="mt-2 text-[17px] text-ink">Choose a village gathering, then come back here to see it or cancel.</p>
                 <Link href="/" className="btn-primary mt-4">
                   See village events
                 </Link>
               </div>
             ) : (
               <ul className="mt-5 grid gap-[14px]">
-                {registrations.map(({ event, rsvp }) => (
-                  <li key={rsvp.id} className="card">
-                    <p className="meta-line">{villageTitle(event.village)}</p>
-                    <h3 className="font-display mt-1 text-[24px] leading-tight font-bold">{event.title}</h3>
-                    <p className="meta-line mt-2">
-                      {formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}
-                    </p>
-                    <p className="meta-line">{event.locationName}</p>
-                    <p className="status-line mt-2.5">
-                      {rsvp.status === "waitlist" ? "You are on the waitlist." : "You are signed up."}
-                    </p>
-                    {event.status === "cancelled" ? (
-                      <p className="mt-2 text-[17px] font-bold text-terracotta">The host cancelled this gathering.</p>
-                    ) : null}
-                    <form action={memberCancelRsvp} className="mt-4">
-                      <input type="hidden" name="returnTo" value={RETURN_TO} />
-                      <input type="hidden" name="eventId" value={event.id} />
-                      <button type="submit" className="btn-secondary">
-                        {`Cancel my planned attendance at ${event.title}`}
-                      </button>
-                    </form>
-                  </li>
+                {upcoming.map(({ event, rsvp }) => (
+                  <EventCard key={rsvp.id} event={event} rsvp={rsvp} allowCancel />
                 ))}
               </ul>
             )}
+            {past.length > 0 ? (
+              <details className="card mt-8">
+                <summary className="min-h-14 cursor-pointer text-[17px] font-bold text-ink">
+                  Past events ({past.length})
+                </summary>
+                <ul className="mt-4 grid gap-[14px]">
+                  {past.map(({ event, rsvp }) => (
+                    <EventCard key={rsvp.id} event={event} rsvp={rsvp} allowCancel={false} />
+                  ))}
+                </ul>
+              </details>
+            ) : null}
           </section>
         ) : (
           <p className="mt-8 text-[17px] text-ink">
@@ -131,6 +121,40 @@ export default async function MyEventsPage({
       </main>
       <SiteFooter />
     </>
+  );
+}
+
+function EventCard({
+  event,
+  rsvp,
+  allowCancel,
+}: {
+  event: EventRow;
+  rsvp: RsvpRow;
+  allowCancel: boolean;
+}) {
+  return (
+    <li className="card">
+      <p className="meta-line">{villageTitle(event.village)}</p>
+      <h3 className="font-display mt-1 text-[24px] leading-tight font-bold">{event.title}</h3>
+      <p className="meta-line mt-2">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
+      <p className="meta-line">{event.locationName}</p>
+      <p className="status-line mt-2.5">{rsvp.status === "waitlist" ? "You are on the waitlist." : "You are signed up."}</p>
+      {event.status === "cancelled" ? (
+        <p className="mt-2 text-[17px] font-bold text-terracotta">The host cancelled this gathering.</p>
+      ) : null}
+      {allowCancel ? (
+        <form action={memberCancelRsvp} className="mt-4">
+          <input type="hidden" name="returnTo" value={RETURN_TO} />
+          <input type="hidden" name="eventId" value={event.id} />
+          <button type="submit" className="btn-secondary">
+            {`Cancel my planned attendance at ${event.title}`}
+          </button>
+        </form>
+      ) : (
+        <p className="meta-line mt-3">This gathering has ended.</p>
+      )}
+    </li>
   );
 }
 
@@ -152,16 +176,16 @@ async function listMemberRegistrations(memberEmail: string): Promise<{ event: Ev
     )
     .all();
   const byId = new Map(eventRows.map((event) => [event.id, event]));
-  const now = Date.now();
-  return mine
-    .flatMap((rsvp) => {
-      const event = byId.get(rsvp.eventId);
-      return event ? [{ event, rsvp }] : [];
-    })
-    .sort((a, b) => {
-      const aPast = a.event.startsAt.getTime() < now;
-      const bPast = b.event.startsAt.getTime() < now;
-      if (aPast !== bPast) return aPast ? 1 : -1;
-      return a.event.startsAt.getTime() - b.event.startsAt.getTime();
-    });
+  const now = new Date();
+  const rows = mine.flatMap((rsvp) => {
+    const event = byId.get(rsvp.eventId);
+    return event ? [{ event, rsvp }] : [];
+  });
+  const upcoming = rows
+    .filter((row) => !eventIsPast(row.event, now))
+    .sort((a, b) => a.event.startsAt.getTime() - b.event.startsAt.getTime());
+  const past = rows
+    .filter((row) => eventIsPast(row.event, now))
+    .sort((a, b) => (b.event.endsAt ?? b.event.startsAt).getTime() - (a.event.endsAt ?? a.event.startsAt).getTime());
+  return [...upcoming, ...past];
 }

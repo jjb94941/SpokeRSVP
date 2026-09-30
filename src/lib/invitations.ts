@@ -41,11 +41,12 @@ export function parseInviteList(raw: string): { emails: string[]; invalid: strin
 }
 
 export function inviteBlockReason(
-  event: Pick<EventRow, "status" | "startsAt">,
+  event: Pick<EventRow, "status" | "startsAt"> & { endsAt?: Date | null },
   now: Date,
 ): "cancelled" | "past" | null {
   if (event.status === "cancelled") return "cancelled";
-  if (event.startsAt.getTime() < now.getTime()) return "past";
+  const end = event.endsAt ?? event.startsAt;
+  if (end.getTime() < now.getTime()) return "past";
   return null;
 }
 

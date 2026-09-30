@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Flash } from "@/components/Ui";
 import { requireHost } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events, hosts } from "@/lib/db/schema";
+import { partitionEvents } from "@/lib/event-lifecycle";
 import { isAdmin, roleLabel } from "@/lib/roles";
 import { getEventCounts } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
@@ -12,11 +13,12 @@ import { villageTitle } from "@/lib/villages";
 export default async function HostHome({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; when?: string }>;
 }) {
   const host = await requireHost();
   const admin = isAdmin(host);
   const params = await searchParams;
+  const showingPast = params.when === "past";
   const db = await getDb();
   const listedQuery = db
     .select({
@@ -28,10 +30,13 @@ export default async function HostHome({
   const scoped = admin
     ? listedQuery
     : listedQuery.where(eq(events.village, host.village || ""));
-  const rows = (await scoped.orderBy(desc(events.startsAt)).all()).sort((a, b) => {
-    if (a.event.status !== b.event.status) return a.event.status === "cancelled" ? 1 : -1;
-    return a.event.startsAt.getTime() - b.event.startsAt.getTime();
-  });
+  const loaded = await scoped.all();
+  const parts = partitionEvents(
+    loaded.map((row) => row.event),
+    new Date(),
+  );
+  const byId = new Map(loaded.map((row) => [row.event.id, row]));
+  const rows = (showingPast ? parts.past : parts.upcoming).map((event) => byId.get(event.id)!);
   const listed = await Promise.all(
     rows.map(async (row) => ({ ...row, counts: await getEventCounts(row.event) })),
   );
@@ -45,7 +50,13 @@ export default async function HostHome({
             Signed in as {host.email} · {roleLabel(host.role)}
           </p>
           <h1 className="font-display mt-1 text-[32px] leading-tight font-bold">
-            {admin ? "All village events" : host.village ? `${villageTitle(host.village)} events` : "Your events"}
+            {showingPast
+              ? "Past events"
+              : admin
+                ? "All village events"
+                : host.village
+                  ? `${villageTitle(host.village)} events`
+                  : "Your events"}
           </h1>
           <p className="mt-2 max-w-2xl text-[17px] text-ink">
             {admin
@@ -61,14 +72,25 @@ export default async function HostHome({
               Manage hosts
             </Link>
           ) : null}
+          <Link href={showingPast ? "/host" : "/host?when=past"} className="btn-secondary">
+            {showingPast ? "Upcoming events" : "Past events"}
+          </Link>
           <Link href="/host/events/new" className="btn-primary">
             Create an event
           </Link>
         </div>
       </div>
+      {showingPast ? (
+        <p className="mt-4 max-w-2xl text-[17px] text-ink">
+          These gatherings have ended. Open one to see who came and any waiver answers. They are hidden from the public
+          list and from upcoming events.
+        </p>
+      ) : null}
       {listed.length === 0 ? (
         <p className="mt-8 text-[17px] text-ink">
-          No events yet. Create one and share the RSVP link with neighbors.
+          {showingPast
+            ? "No past events yet."
+            : "No upcoming events. Create one and share the RSVP link with neighbors."}
         </p>
       ) : (
         <ul className="mt-8 grid gap-[14px]">
