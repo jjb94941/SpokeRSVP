@@ -35,6 +35,13 @@ export function roleLabel(role: string | null | undefined): string {
   return normalizeHostRole(role) === "admin" ? "Super-administrator" : "Village host";
 }
 
+/** Short label for the host list: "Super-admin" or "Mill Valley host". */
+export function accountRoleLabel(host: { role?: string | null; village?: string | null }): string {
+  if (isAdmin({ role: normalizeHostRole(host.role) })) return "Super-admin";
+  if (host.village) return `${host.village} host`;
+  return "Village host";
+}
+
 export async function requireAdmin(
   message = "Only super-administrators can manage host accounts.",
 ): Promise<Host> {
@@ -98,16 +105,25 @@ export function assertCanRemoveHost(
   }
 }
 
-export function parseNewSubAdmin(input: {
+export function assertCanCreateHost(actor: Pick<Host, "role">, role: string) {
+  assertAdminActor(actor);
+  if (role !== "admin" && role !== "sub_admin") {
+    throw new HostAdminError("Choose super-admin or village host.");
+  }
+}
+
+export function parseNewHost(input: {
   name: string;
   email: string;
   password: string;
-  village: string;
+  role: string;
+  village?: string;
 }): {
   name: string;
   email: string;
   password: string;
-  village: Village;
+  role: HostRole;
+  village: Village | null;
 } {
   const name = input.name.trim();
   const email = normalizeEmail(input.email) || "";
@@ -121,8 +137,29 @@ export function parseNewSubAdmin(input: {
   if (password.length < 8) {
     throw new HostAdminError("Temporary password must be at least 8 characters.");
   }
+  if (input.role === "admin") {
+    return { name, email, password, role: "admin", village: null };
+  }
+  if (input.role !== "sub_admin") {
+    throw new HostAdminError("Choose super-admin or village host.");
+  }
   if (!isVillage(input.village)) {
     throw new HostAdminError("Choose one village for this host.");
   }
-  return { name, email, password, village: input.village };
+  return { name, email, password, role: "sub_admin", village: input.village };
+}
+
+export function parseNewSubAdmin(input: {
+  name: string;
+  email: string;
+  password: string;
+  village: string;
+}): {
+  name: string;
+  email: string;
+  password: string;
+  village: Village;
+} {
+  const parsed = parseNewHost({ ...input, role: "sub_admin" });
+  return { name: parsed.name, email: parsed.email, password: parsed.password, village: parsed.village as Village };
 }

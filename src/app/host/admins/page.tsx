@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { count } from "drizzle-orm";
 import { Flash, Field, inputClass } from "@/components/Ui";
-import { createSubAdmin, removeHost, setHostRole, setHostVillage } from "@/lib/actions/hosts";
+import { createHost, removeHost, setHostRole, setHostVillage } from "@/lib/actions/hosts";
 import { readNewHostPasswordFlash } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events, hosts, type Host } from "@/lib/db/schema";
-import { countAdmins, isAdmin, requireAdmin, roleLabel } from "@/lib/roles";
-import { VILLAGES, villageTitle } from "@/lib/villages";
+import { accountRoleLabel, countAdmins, isAdmin, requireAdmin } from "@/lib/roles";
+import { VILLAGES } from "@/lib/villages";
 
 export const metadata: Metadata = { title: "Manage hosts" };
 
@@ -39,31 +39,50 @@ export default async function HostAdminsPage({
       </p>
       <h1 className="font-display text-4xl">Manage hosts</h1>
       <p className="mt-3 max-w-3xl text-lg">
-        Super-administrators can manage events in every community and appoint a host for one village.
+        Super-admins can manage events in every community. Add another super-admin, or a host for one village.
         A village host can manage every event for that village only.
       </p>
       <Flash ok={params.ok} error={params.error} />
       {tempPassword ? (
         <section className="mb-6 rounded-2xl border-2 border-teal bg-teal/10 px-5 py-4" role="status">
           <h2 className="font-display text-2xl">Temporary password</h2>
-          <p className="mt-2 text-lg">
-            Share this once with the new village host. It is not shown again.
-          </p>
+          <p className="mt-2 text-lg">Share this once with the new person. It is not shown again.</p>
           <p className="mt-3 break-all rounded-xl bg-white px-4 py-3 font-mono text-xl">{tempPassword}</p>
         </section>
       ) : null}
 
       <section className="card mb-8">
-        <h2 className="font-display mb-2 text-3xl">Appoint a village host</h2>
+        <h2 className="font-display mb-2 text-3xl">Add a person</h2>
         <p className="mb-5 text-lg">
-          They will sign in and manage every event for one village. They cannot see other villages or change
-          anyone’s role.
+          Choose Super-admin for every village, or Village host for one village. They sign in with this email
+          and password, the same way existing hosts do.
         </p>
-        <form action={createSubAdmin} className="max-w-xl">
+        <form action={createHost} className="max-w-xl">
+          <fieldset className="mb-5">
+            <legend className="mb-2 text-lg font-bold">Role</legend>
+            <label className="mb-3 flex min-h-14 items-center gap-3 text-lg">
+              <input type="radio" name="role" value="admin" className="h-6 w-6 accent-terracotta" />
+              Super-admin — every village
+            </label>
+            <label className="flex min-h-14 items-center gap-3 text-lg">
+              <input
+                type="radio"
+                name="role"
+                value="sub_admin"
+                defaultChecked
+                className="h-6 w-6 accent-terracotta"
+              />
+              Village host — one village
+            </label>
+          </fieldset>
           <Field label="Name" htmlFor="name">
             <input id="name" name="name" required minLength={2} className={inputClass} autoComplete="name" />
           </Field>
-          <Field label="Village" htmlFor="village" hint="Each host belongs to one village.">
+          <Field
+            label="Village"
+            htmlFor="village"
+            hint="Used only for a village host. A super-admin is not assigned to one village."
+          >
             <VillageSelect id="village" defaultValue="Mill Valley" />
           </Field>
           <Field label="Email" htmlFor="email" hint="They will use this email to sign in.">
@@ -84,7 +103,7 @@ export default async function HostAdminsPage({
             />
           </Field>
           <button type="submit" className="btn-primary">
-            Appoint village host
+            Add this person
           </button>
         </form>
       </section>
@@ -146,10 +165,7 @@ function HostAccountCard({
           </h3>
           <p className="mt-1 text-lg">{host.email}</p>
           <p className="mt-2 text-lg">
-            <span className="rounded-full bg-sand px-3 py-1 font-bold">{roleLabel(host.role)}</span>
-            {host.village ? (
-              <span className="ml-3 font-bold text-teal">{villageTitle(host.village)}</span>
-            ) : null}
+            <span className="rounded-full bg-sand px-3 py-1 font-bold">{accountRoleLabel(host)}</span>
             <span className="ml-3 text-ink/80">
               {eventCount} event{eventCount === 1 ? "" : "s"}
             </span>
@@ -157,11 +173,16 @@ function HostAccountCard({
         </div>
       </div>
 
-      {self ? (
-        <p className="mt-4 text-base">You cannot change or remove your own super-administrator account.</p>
+      {self && lastAdmin ? (
+        <p className="mt-4 text-base">
+          You are the last super-admin, so you cannot demote or remove yourself.
+        </p>
+      ) : null}
+      {self && !lastAdmin ? (
+        <p className="mt-4 text-base">You cannot change or remove your own account. Another super-admin can.</p>
       ) : null}
       {lastAdmin && !self ? (
-        <p className="mt-4 text-base">This is the last super-administrator, so the role cannot be removed.</p>
+        <p className="mt-4 text-base">This is the last super-admin, so the role cannot be removed.</p>
       ) : null}
 
       {!isAdmin(host) ? (
@@ -178,21 +199,29 @@ function HostAccountCard({
 
       <div className="mt-5 flex flex-wrap items-end gap-3">
         {canPromote ? (
-          <form action={setHostRole}>
+          <form action={setHostRole} className="max-w-md">
             <input type="hidden" name="hostId" value={host.id} />
             <input type="hidden" name="role" value="admin" />
+            <label className="mb-4 flex min-h-14 items-center gap-3 text-lg">
+              <input type="checkbox" name="confirm" value="yes" className="h-6 w-6 accent-terracotta" />
+              Yes, make {host.name} a super-admin
+            </label>
             <button type="submit" className="btn-secondary">
-              Make super-administrator
+              Make super-admin
             </button>
           </form>
         ) : null}
         {canDemote ? (
-          <form action={setHostRole} className="flex flex-wrap items-end gap-3">
+          <form action={setHostRole} className="max-w-md">
             <Field label="Village" htmlFor={`demote-village-${host.id}`}>
               <VillageSelect id={`demote-village-${host.id}`} defaultValue="Mill Valley" />
             </Field>
             <input type="hidden" name="hostId" value={host.id} />
             <input type="hidden" name="role" value="sub_admin" />
+            <label className="mb-4 flex min-h-14 items-center gap-3 text-lg">
+              <input type="checkbox" name="confirm" value="yes" className="h-6 w-6 accent-terracotta" />
+              Yes, assign {host.name} as a village host
+            </label>
             <button type="submit" className="btn-secondary">
               Assign as village host
             </button>
@@ -214,7 +243,7 @@ function HostAccountCard({
             Yes, remove {host.name}
           </label>
           <input type="hidden" name="hostId" value={host.id} />
-          <button type="submit" className="btn-primary">
+          <button type="submit" className="btn-danger">
             Remove host
           </button>
         </form>

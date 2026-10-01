@@ -107,6 +107,21 @@ ${opts.url}
 This link expires in 30 minutes. If you did not ask for it, you can ignore this email.`;
 }
 
+export function superAdminWelcomeText(opts: { name: string; loginUrl: string; appointedBy: string }): string {
+  return `Hello ${opts.name},
+
+${opts.appointedBy} added you as a SpokeRSVP super-admin for Marin Villages.
+
+You can view and manage events in every village, appoint hosts, and add other super-admins. You are not tied to one village.
+
+Sign in here:
+${opts.loginUrl}
+
+Ask the person who added you for your temporary password, or use “email me a sign-in link” on that page.
+
+Marin Villages — SpokeRSVP`;
+}
+
 export function subAdminWelcomeText(opts: {
   name: string;
   loginUrl: string;

@@ -119,7 +119,7 @@ You can also run reminders manually: `POST` or `GET` `/api/reminders` with `Auth
 
 ## What the MVP does
 
-- **Hosts** sign in with email/password or a magic link. **Super-administrators** can view and manage events in every Marin Villages community and appoint village hosts at `/host/admins`. **Village hosts** are assigned to one of Tiburon, Mill Valley, Novato, San Rafael, Twin Cities, or Ross Valley, and can manage every event for that village only. Existing events stay Mill Valley when the village column is added.
+- **Hosts** sign in with email/password or a magic link. **Super-admins** can view and manage events in every Marin Villages community. At `/host/admins` they can add another super-admin (no village) or a village host (one village), and can promote or demote with a confirmation. The last super-admin cannot be removed or demoted, including by themselves. **Village hosts** are assigned to one of Tiburon, Mill Valley, Novato, San Rafael, Twin Cities, or Ross Valley, and can manage every event for that village only. Existing events stay Mill Valley when the village column is added.
 - **Guests** open `/e/<token>` with **no account**. They RSVP with name plus phone **or** email: Going, not going, or waitlist when the event is full. Changing from Going to not going opens that seat again. A host can promote the next waiting neighbor.
 - **Members** use the public events page with email only (no password). They can filter by village, sign up, and cancel with **Cancel my planned attendance at** the event name. **My events** lists every signup across villages, and the same cancel wording works there. Cancelling restores the open-seat count from before that signup.
 - **Event types and waivers** are managed by super-administrators at `/host/event-types`. Each event has one type. A type can have one waiver, and each waiver version can include up to four questions (a label, optional help text, required or optional, single line or a larger box). The first time a neighbor registers for that type, they read the waiver, answer those questions, check that they agree, and type their full name. Later registrations skip it until the waiver text or questions change and a new version is saved. People already signed up are not removed. Answers stay with that signature. They are shown to super-administrators and to the host of the village for the event the neighbor joined. They are not on public pages or in the CSV download. Village hosts can choose a type but cannot edit types or waivers.
@@ -132,7 +132,7 @@ You can also run reminders manually: `POST` or `GET` `/api/reminders` with `Auth
 
 ## Host roles
 
-- **Super-administrator** — every event in every village, plus appoint, reassign, promote, or remove hosts at `/host/admins`. Not tied to one village. The host header stays “Marin Villages”.
+- **Super-admin** — every event in every village. At `/host/admins` they add a person as Super-admin or as a village host, promote a host, or demote a super-admin to one village. Each change asks for confirmation. They cannot remove or demote the last super-admin, and they cannot change or remove their own account. Not tied to one village. The host header stays “Marin Villages”.
 - **Village host** — one village. They can view and manage every event for that village, including events another host in the same village created. The header shows that village, for example “Mill Valley Village”.
 
 Villages: Tiburon, Mill Valley, Novato, San Rafael, Twin Cities, Ross Valley. Existing events and village hosts default to Mill Valley (`ensureSchema` adds `events.village` and `hosts.village`, ALTER-safe on SQLite/Turso).
@@ -147,11 +147,21 @@ npm install && npm run db:reset && npm run dev
 
 Then open [http://localhost:3000](http://localhost:3000).
 
+**If you already have a local database, do not reset it.** Pull this branch, install if needed, and restart the dev server:
+
+```bash
+git pull origin cursor/village-warm-host-b975
+npm install
+npm run dev
+```
+
+Adding a super-admin uses the existing host role. There is no new column and no migration to run.
+
 **As super-administrator** — sign in as `chair@millvalleyvillage.org` / `millvalley`:
 
 1. The header says **Marin Villages**. Host home lists events from every village, including Mill Valley ones. **Manage hosts** is in the header.
-2. Open **Manage hosts**. Appoint a host: name, email, **one village** (try Tiburon), and an optional temporary password. The password is shown once.
-3. Confirm you cannot remove or demote the last super-administrator (yourself).
+2. Open **Manage hosts**. Add a person as **Super-admin** (no village) or **Village host** (try Tiburon). Leave the password blank to generate one, or type at least 8 characters. The password is shown once. Each person is labeled Super-admin or, for example, Mill Valley host.
+3. Confirm you cannot remove or demote yourself while you are the last super-admin. Promoting or demoting someone else asks you to check a box first.
 4. Open **Event types**. Walk/Hike has the liability waiver and four questions (emergency contact name and phone required, blood type optional, allergies optional). Social and Book club do not. Archive is available. Saving changed waiver text or questions creates a new version. Signatures, including answers, stay listed under the waiver.
 
 **As a village host** — sign out, then sign in as `volunteer@millvalleyvillage.org` / `millvalley`:

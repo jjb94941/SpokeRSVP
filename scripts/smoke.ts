@@ -19,11 +19,14 @@ import {
 import { autoPromoteWaitlist, getEventCounts, submitRsvp } from "../src/lib/rsvp-service";
 import {
   HostAdminError,
+  accountRoleLabel,
+  assertCanCreateHost,
   assertCanRemoveHost,
   assertCanSetRole,
   canManageEvent,
   countAdmins,
   isAdmin,
+  parseNewHost,
   parseNewSubAdmin,
 } from "../src/lib/roles";
 import { APP_VERSION, appVersionLabel } from "../src/lib/version";
@@ -267,6 +270,24 @@ function hostRolePolicies() {
     () => parseNewSubAdmin({ name: "Pat", email: "pat@example.com", password: "temporary1", village: "Sausalito" }),
     /one village/,
   );
+
+  assertCanCreateHost(admin, "admin");
+  assertCanCreateHost(admin, "sub_admin");
+  assert.throws(() => assertCanCreateHost(sub, "admin"), HostAdminError);
+  assert.throws(() => assertCanCreateHost(sub, "sub_admin"), HostAdminError);
+  const createdAdmin = parseNewHost({
+    name: "Alex Chair",
+    email: "  Alex@Example.org ",
+    password: "temporary1",
+    role: "admin",
+    village: "Mill Valley",
+  });
+  assert.equal(createdAdmin.role, "admin");
+  assert.equal(createdAdmin.village, null);
+  assert.equal(createdAdmin.email, "alex@example.org");
+  assert.equal(accountRoleLabel(admin), "Super-admin");
+  assert.equal(accountRoleLabel(sub), "Mill Valley host");
+  assert.equal(accountRoleLabel({ role: "sub_admin", village: null }), "Village host");
 }
 
 async function hostRoleMigration() {

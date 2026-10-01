@@ -7,14 +7,15 @@ import { appUrl, requireHost, setNewHostPasswordFlash } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events, hosts } from "@/lib/db/schema";
 import { newId, newSecretToken } from "@/lib/ids";
-import { subAdminWelcomeText, sendEmail } from "@/lib/notify";
+import { sendEmail, subAdminWelcomeText, superAdminWelcomeText } from "@/lib/notify";
 import {
   HostAdminError,
+  assertCanCreateHost,
   assertCanRemoveHost,
   assertCanSetRole,
   countAdmins,
   isAdmin,
-  parseNewSubAdmin,
+  parseNewHost,
 } from "@/lib/roles";
 import { isVillage, villageTitle } from "@/lib/villages";
 
@@ -34,16 +35,23 @@ async function requireAdminActor() {
   return actor;
 }
 
-export async function createSubAdmin(formData: FormData) {
+export async function createHost(formData: FormData) {
   const actor = await requireAdminActor();
+  const role = formString(formData, "role") || "sub_admin";
+  try {
+    assertCanCreateHost(actor, role);
+  } catch (error) {
+    adminsError(error instanceof HostAdminError ? error.message : "Only super-administrators can add hosts.");
+  }
   const providedPassword = formString(formData, "password");
   const password = providedPassword || newSecretToken(9);
   let parsed;
   try {
-    parsed = parseNewSubAdmin({
+    parsed = parseNewHost({
       name: formString(formData, "name"),
       email: formString(formData, "email"),
       password,
+      role,
       village: formString(formData, "village"),
     });
   } catch (error) {
@@ -63,7 +71,7 @@ export async function createSubAdmin(formData: FormData) {
       email: parsed.email,
       passwordHash: bcrypt.hashSync(parsed.password, 10),
       name: parsed.name,
-      role: "sub_admin",
+      role: parsed.role,
       village: parsed.village,
       createdAt: new Date(),
     })
@@ -71,20 +79,31 @@ export async function createSubAdmin(formData: FormData) {
 
   await setNewHostPasswordFlash(parsed.password);
   const loginUrl = `${await appUrl()}/login`;
+  if (parsed.role === "admin") {
+    await sendEmail({
+      to: parsed.email,
+      subject: "You were added as a SpokeRSVP super-admin",
+      text: superAdminWelcomeText({ name: parsed.name, loginUrl, appointedBy: actor.name }),
+    });
+    redirect(
+      "/host/admins?ok=" +
+        encodeURIComponent(`${parsed.name} is a super-admin. Share the temporary password shown below.`),
+    );
+  }
   await sendEmail({
     to: parsed.email,
-    subject: `You were added as a SpokeRSVP host for ${villageTitle(parsed.village)}`,
+    subject: `You were added as a SpokeRSVP host for ${villageTitle(parsed.village || "")}`,
     text: subAdminWelcomeText({
       name: parsed.name,
       loginUrl,
       appointedBy: actor.name,
-      villageTitle: villageTitle(parsed.village),
+      villageTitle: villageTitle(parsed.village || ""),
     }),
   });
   redirect(
     "/host/admins?ok=" +
       encodeURIComponent(
-        `${parsed.name} can now manage ${villageTitle(parsed.village)} events. Share the temporary password shown below.`,
+        `${parsed.name} can now manage ${villageTitle(parsed.village || "")} events. Share the temporary password shown below.`,
       ),
   );
 }
@@ -108,6 +127,9 @@ export async function setHostVillage(formData: FormData) {
 
 export async function setHostRole(formData: FormData) {
   const actor = await requireAdminActor();
+  if (formString(formData, "confirm") !== "yes") {
+    adminsError("Check the box to confirm this role change.");
+  }
   const targetId = formString(formData, "hostId");
   const nextRole = formString(formData, "role");
   const village = formString(formData, "village");

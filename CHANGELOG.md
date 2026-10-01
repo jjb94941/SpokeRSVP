@@ -4,6 +4,8 @@ Product versions use `Ver. XX.YY` plus a human-readable date. Bump both `number`
 
 ## Unreleased
 
+A super-admin can add another super-admin from Manage hosts, or add a village host for one village. An existing host can be promoted, and a super-admin can be assigned to one village. Each of those changes asks for confirmation. The last super-admin cannot be removed or demoted. New people sign in with email and password the same way existing hosts do. No database change is required.
+
 Village hosts belong to one Marin Villages community (Tiburon, Mill Valley, Novato, San Rafael, Twin Cities, or Ross Valley) and manage that village’s events only. Super-administrators assign the village and still see every community. Existing events stay Mill Valley.
 
 Members sign up from the public events list with email only. After they are signed up, that card says **Cancel my planned attendance at** the event. **My events** lists every signup across villages and uses the same cancel action. Cancelling restores the open-seat count from before that signup.
