@@ -3,14 +3,19 @@ import fs from "node:fs";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { closeDb, fileUrlToPath, getDb, resolveDatabaseUrl, wipeData } from "../src/lib/db";
-import { carpools, events, hosts, rsvps } from "../src/lib/db/schema";
+import { BOOK_TYPE_NAME, SOCIAL_TYPE_NAME, WALK_TYPE_NAME } from "../src/lib/event-catalog";
+import { invitationEmail } from "../src/lib/invitations";
+import { carpools, eventTypes, events, hosts, invitations, outboxMessages, rsvps } from "../src/lib/db/schema";
 import { newId, newSecretToken, newShareToken } from "../src/lib/ids";
-import { pacificWallToUtc } from "../src/lib/time";
+import { formatPacificRange, pacificWallToUtc } from "../src/lib/time";
+import { villageTitle } from "../src/lib/villages";
 
 config();
 
 const DEMO_EMAIL = "chair@millvalleyvillage.org";
 const DEMO_PASSWORD = "millvalley";
+const SUB_ADMIN_EMAIL = "volunteer@millvalleyvillage.org";
+const SUB_ADMIN_PASSWORD = "millvalley";
 
 function at(date: string, time: string) {
   return pacificWallToUtc(date, time);
@@ -61,6 +66,21 @@ async function main() {
       email: DEMO_EMAIL,
       passwordHash: bcrypt.hashSync(DEMO_PASSWORD, 10),
       name: "Mill Valley Village Chair",
+      role: "admin",
+      createdAt: now,
+    })
+    .run();
+
+  const volunteerId = newId();
+  await db
+    .insert(hosts)
+    .values({
+      id: volunteerId,
+      email: SUB_ADMIN_EMAIL,
+      passwordHash: bcrypt.hashSync(SUB_ADMIN_PASSWORD, 10),
+      name: "Mill Valley Volunteer Host",
+      role: "sub_admin",
+      village: "Mill Valley",
       createdAt: now,
     })
     .run();
@@ -68,6 +88,15 @@ async function main() {
   const hikeId = newId();
   const coffeeId = newId();
   const bookId = newId();
+  const catalog = await db.select().from(eventTypes).all();
+  const typeId = (name: string) => {
+    const found = catalog.find((type) => type.name === name);
+    if (!found) throw new Error(`Missing event type ${name}. Restart the app so the catalog can be created.`);
+    return found.id;
+  };
+  const walkTypeId = typeId(WALK_TYPE_NAME);
+  const socialTypeId = typeId(SOCIAL_TYPE_NAME);
+  const bookTypeId = typeId(BOOK_TYPE_NAME);
 
   await db
     .insert(events)
@@ -75,6 +104,7 @@ async function main() {
       {
         id: hikeId,
         hostId,
+        eventTypeId: walkTypeId,
         title: "Third Wednesday Walkers",
         description:
           "A 2–3 mile mostly-flat walk with time for lunch afterward. We gather in Mill Valley and often carpool to the trail. Wear comfortable shoes and bring water.",
@@ -85,6 +115,7 @@ async function main() {
         capacity: 12,
         carpoolsEnabled: true,
         status: "published",
+        village: "Mill Valley",
         shareToken: newShareToken(),
         createdAt: now,
         updatedAt: now,
@@ -92,6 +123,7 @@ async function main() {
       {
         id: coffeeId,
         hostId,
+        eventTypeId: socialTypeId,
         title: "Friday coffee at Equator",
         description:
           "Informal drop-in coffee for Mill Valley Village neighbors. Come for as long as you like — no program, just conversation.",
@@ -102,6 +134,7 @@ async function main() {
         capacity: 10,
         carpoolsEnabled: false,
         status: "published",
+        village: "Mill Valley",
         shareToken: newShareToken(),
         createdAt: now,
         updatedAt: now,
@@ -109,6 +142,7 @@ async function main() {
       {
         id: bookId,
         hostId,
+        eventTypeId: bookTypeId,
         title: "Third Tuesday Book Club",
         description:
           "Small discussion group kept intimate on purpose. This month we are reading a novel chosen by the group. Newcomers are welcome when a seat opens — please join the waitlist if we are full.",
@@ -119,6 +153,26 @@ async function main() {
         capacity: 8,
         carpoolsEnabled: false,
         status: "published",
+        village: "Mill Valley",
+        shareToken: newShareToken(),
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: newId(),
+        hostId: volunteerId,
+        eventTypeId: socialTypeId,
+        title: "Saturday stretch & chat",
+        description:
+          "Gentle stretching in the park, then a short sit-down conversation. Hosted by a Mill Valley village host.",
+        startsAt: at("2026-09-19", "09:30"),
+        endsAt: at("2026-09-19", "10:30"),
+        locationName: "Boyle Park lawn",
+        streetAddress: null,
+        capacity: 16,
+        carpoolsEnabled: false,
+        status: "published",
+        village: "Mill Valley",
         shareToken: newShareToken(),
         createdAt: now,
         updatedAt: now,
@@ -187,6 +241,66 @@ async function main() {
   await addRsvp(bookId, "Quinn Ellis", "waitlist", { email: "quinn@example.com", waitlistOrder: 1 });
   await addRsvp(bookId, "Rita Hoffman", "waitlist", { email: "rita@example.com", waitlistOrder: 2 });
 
+  const jordanToken = newSecretToken(24);
+  const inviteMessage = "We saved you a seat in the conversation. Come if you can.";
+  await db
+    .insert(invitations)
+    .values([
+      {
+        id: newId(),
+        eventId: bookId,
+        email: "sam.neighbor@example.com",
+        name: "Sam Neighbor",
+        token: newSecretToken(24),
+        status: "not_sent",
+        message: "",
+        createdAt: now,
+        updatedAt: now,
+        sentAt: null,
+        openedAt: null,
+        registeredAt: null,
+      },
+      {
+        id: newId(),
+        eventId: bookId,
+        email: "jordan.lee@example.com",
+        name: "Jordan Lee",
+        token: jordanToken,
+        status: "sent",
+        message: inviteMessage,
+        createdAt: now,
+        updatedAt: now,
+        sentAt: now,
+        openedAt: null,
+        registeredAt: null,
+      },
+    ])
+    .run();
+  const bookEvent = await db.select().from(events).where(eq(events.id, bookId)).get();
+  const origin = process.env.APP_URL || "http://localhost:3000";
+  const jordanMail = invitationEmail({
+    name: "Jordan Lee",
+    eventTitle: bookEvent!.title,
+    village: bookEvent!.village,
+    when: formatPacificRange(bookEvent!.startsAt.getTime(), bookEvent!.endsAt?.getTime()),
+    where: bookEvent!.locationName,
+    message: inviteMessage,
+    registerUrl: `${origin}/invite/${jordanToken}`,
+  });
+  await db
+    .insert(outboxMessages)
+    .values({
+      id: newId(),
+      toEmail: "jordan.lee@example.com",
+      subject: jordanMail.subject,
+      textBody: jordanMail.text,
+      htmlBody: jordanMail.html,
+      eventId: bookId,
+      provider: "outbox",
+      createdAt: now,
+    })
+    .run();
+
   const hike = await db.select().from(events).where(eq(events.id, hikeId)).get();
   const coffee = await db.select().from(events).where(eq(events.id, coffeeId)).get();
   const book = await db.select().from(events).where(eq(events.id, bookId)).get();
@@ -194,14 +308,22 @@ async function main() {
   console.log("Seeded Mill Valley Village demo data.");
   console.log(`Database: ${url.startsWith("file:") ? url : "Turso / remote libSQL"}`);
   console.log("");
-  console.log("Demo host (local / development only — change this password before production):");
+  console.log("Demo super-administrator (local / development only — change this password before production):");
   console.log(`  Email:    ${DEMO_EMAIL}`);
   console.log(`  Password: ${DEMO_PASSWORD}`);
+  console.log("  Role:     super-administrator (every village, and Manage hosts)");
+  console.log("");
+  console.log("Demo Mill Valley host:");
+  console.log(`  Email:    ${SUB_ADMIN_EMAIL}`);
+  console.log(`  Password: ${SUB_ADMIN_PASSWORD}`);
+  console.log("  Role:     village host (Mill Valley events only)");
   console.log("");
   console.log("Guest RSVP links:");
   console.log(`  Walkers:  /e/${hike?.shareToken}`);
   console.log(`  Coffee:   /e/${coffee?.shareToken}`);
   console.log(`  Book club:/e/${book?.shareToken}`);
+  console.log(`  Book club invitation: /invite/${jordanToken}`);
+  console.log(`Village on that invitation: ${villageTitle(bookEvent!.village)}`);
 }
 
 main()

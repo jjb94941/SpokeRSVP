@@ -87,6 +87,8 @@ export async function getClient(): Promise<Client> {
 
 export async function getDb(): Promise<Db> {
   const slot = await connect();
+  const { ensureEventCatalog } = await import("../event-catalog");
+  await ensureEventCatalog(slot.db);
   return slot.db;
 }
 
@@ -105,6 +107,12 @@ export function closeDb() {
 export async function wipeData() {
   const client = await getClient();
   await client.executeMultiple(`
+    DELETE FROM outbox_messages;
+    DELETE FROM invitations;
+    DELETE FROM waiver_signatures;
+    DELETE FROM waiver_versions;
+    DELETE FROM event_types;
+    DELETE FROM waivers;
     DELETE FROM carpools;
     DELETE FROM rsvps;
     DELETE FROM magic_links;
@@ -122,6 +130,8 @@ export async function ensureSchema(client?: Client) {
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'admin',
+      village TEXT,
       created_at INTEGER NOT NULL
     );
 
@@ -139,9 +149,49 @@ export async function ensureSchema(client?: Client) {
       used_at INTEGER
     );
 
+    CREATE TABLE IF NOT EXISTS waivers (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS waiver_versions (
+      id TEXT PRIMARY KEY,
+      waiver_id TEXT NOT NULL REFERENCES waivers(id) ON DELETE CASCADE,
+      version INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      fields_json TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL,
+      UNIQUE (waiver_id, version)
+    );
+
+    CREATE TABLE IF NOT EXISTS waiver_signatures (
+      id TEXT PRIMARY KEY,
+      waiver_id TEXT NOT NULL REFERENCES waivers(id) ON DELETE CASCADE,
+      waiver_version_id TEXT NOT NULL REFERENCES waiver_versions(id) ON DELETE CASCADE,
+      version INTEGER NOT NULL,
+      email TEXT NOT NULL,
+      signer_name TEXT NOT NULL,
+      answers_json TEXT NOT NULL DEFAULT '[]',
+      signed_at INTEGER NOT NULL,
+      UNIQUE (waiver_version_id, email)
+    );
+
+    CREATE TABLE IF NOT EXISTS event_types (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      waiver_id TEXT REFERENCES waivers(id) ON DELETE SET NULL,
+      archived INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
       host_id TEXT NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+      event_type_id TEXT,
+      village TEXT NOT NULL DEFAULT 'Mill Valley',
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       starts_at INTEGER NOT NULL,
@@ -177,9 +227,98 @@ export async function ensureSchema(client?: Client) {
       note TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS invitations (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      name TEXT,
+      token TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'not_sent',
+      message TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      sent_at INTEGER,
+      opened_at INTEGER,
+      registered_at INTEGER,
+      UNIQUE (event_id, email)
+    );
+
+    CREATE TABLE IF NOT EXISTS outbox_messages (
+      id TEXT PRIMARY KEY,
+      to_email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      text_body TEXT NOT NULL,
+      html_body TEXT NOT NULL DEFAULT '',
+      event_id TEXT,
+      provider TEXT NOT NULL DEFAULT 'outbox',
+      created_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS sessions_host_id_idx ON sessions(host_id);
+    CREATE INDEX IF NOT EXISTS invitations_event_id_idx ON invitations(event_id);
+    CREATE INDEX IF NOT EXISTS outbox_messages_event_id_idx ON outbox_messages(event_id);
     CREATE INDEX IF NOT EXISTS events_host_id_idx ON events(host_id);
     CREATE INDEX IF NOT EXISTS rsvps_event_id_idx ON rsvps(event_id);
     CREATE INDEX IF NOT EXISTS rsvps_event_status_idx ON rsvps(event_id, status);
   `);
+  await ensureHostRoleColumn(target);
+  await ensureVillageColumns(target);
+  await ensureEventTypeColumn(target);
+  await ensureWaiverFieldColumns(target);
+}
+
+function columnName(row: Record<string, unknown>): string {
+  const named = row.name;
+  if (named != null) return String(named);
+  const byIndex = row[1];
+  return byIndex == null ? "" : String(byIndex);
+}
+
+/** ALTER-safe for existing SQLite/Turso databases created before `hosts.role`. */
+async function ensureHostRoleColumn(client: Client) {
+  const info = await client.execute("PRAGMA table_info(hosts)");
+  const hasRole = info.rows.some((row) => columnName(row as Record<string, unknown>) === "role");
+  if (!hasRole) {
+    await client.execute("ALTER TABLE hosts ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'");
+  }
+  await client.execute(
+    "UPDATE hosts SET role = 'admin' WHERE role IS NULL OR role NOT IN ('admin', 'sub_admin')",
+  );
+}
+
+/** Existing Mill Valley data stays Mill Valley. Village hosts without a village get that default. */
+async function ensureVillageColumns(client: Client) {
+  const hostInfo = await client.execute("PRAGMA table_info(hosts)");
+  if (!hostInfo.rows.some((row) => columnName(row as Record<string, unknown>) === "village")) {
+    await client.execute("ALTER TABLE hosts ADD COLUMN village TEXT");
+  }
+  const eventInfo = await client.execute("PRAGMA table_info(events)");
+  if (!eventInfo.rows.some((row) => columnName(row as Record<string, unknown>) === "village")) {
+    await client.execute("ALTER TABLE events ADD COLUMN village TEXT NOT NULL DEFAULT 'Mill Valley'");
+  }
+  const allowed = "'Tiburon', 'Mill Valley', 'Novato', 'San Rafael', 'Twin Cities', 'Ross Valley'";
+  await client.execute(
+    `UPDATE events SET village = 'Mill Valley' WHERE village IS NULL OR village NOT IN (${allowed})`,
+  );
+  await client.execute(
+    `UPDATE hosts SET village = 'Mill Valley' WHERE role = 'sub_admin' AND (village IS NULL OR village NOT IN (${allowed}))`,
+  );
+}
+
+async function ensureWaiverFieldColumns(client: Client) {
+  const versions = await client.execute("PRAGMA table_info(waiver_versions)");
+  if (!versions.rows.some((row) => columnName(row as Record<string, unknown>) === "fields_json")) {
+    await client.execute("ALTER TABLE waiver_versions ADD COLUMN fields_json TEXT NOT NULL DEFAULT '[]'");
+  }
+  const signatures = await client.execute("PRAGMA table_info(waiver_signatures)");
+  if (!signatures.rows.some((row) => columnName(row as Record<string, unknown>) === "answers_json")) {
+    await client.execute("ALTER TABLE waiver_signatures ADD COLUMN answers_json TEXT NOT NULL DEFAULT '[]'");
+  }
+}
+
+async function ensureEventTypeColumn(client: Client) {
+  const info = await client.execute("PRAGMA table_info(events)");
+  if (!info.rows.some((row) => columnName(row as Record<string, unknown>) === "event_type_id")) {
+    await client.execute("ALTER TABLE events ADD COLUMN event_type_id TEXT");
+  }
 }

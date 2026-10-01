@@ -7,6 +7,7 @@ import { getCurrentHost, getGuestManageToken } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { carpools, events, rsvps, type CarpoolRow, type RsvpRow } from "@/lib/db/schema";
 import { firstName } from "@/lib/format";
+import { eventIsPast } from "@/lib/event-lifecycle";
 import { getEventCounts } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
 
@@ -32,6 +33,7 @@ export default async function PublicRsvpPage({
     ? await db.select().from(carpools).where(eq(carpools.rsvpId, existingForEvent.id)).get()
     : undefined;
   const counts = await getEventCounts(event);
+  const past = eventIsPast(event, new Date());
   const full = counts.spotsLeft <= 0 && existingForEvent?.status !== "going";
   const canSeeCarpools =
     event.carpoolsEnabled && (host || existingForEvent?.status === "going");
@@ -56,7 +58,7 @@ export default async function PublicRsvpPage({
             This event has been cancelled.
           </p>
         ) : null}
-        <p className="text-lg font-semibold text-teal">Mill Valley Village</p>
+        <p className="text-lg font-semibold text-teal">Marin Villages</p>
         <h1 className="font-display mt-1 text-4xl sm:text-5xl">{event.title}</h1>
         <p className="mt-3 text-xl">{formatPacificRange(event.startsAt.getTime(), event.endsAt?.getTime())}</p>
         <p className="mt-2 text-xl">{event.locationName}</p>
@@ -72,7 +74,12 @@ export default async function PublicRsvpPage({
           <p className="mt-5 whitespace-pre-wrap text-lg">{event.description}</p>
         ) : null}
 
-        {event.status === "cancelled" ? null : (
+        {past ? (
+          <p className="mt-6 rounded-2xl border-2 border-card-border bg-card px-4 py-3 text-[17px] text-ink">
+            This event has already happened. Signup and the waitlist are closed.
+          </p>
+        ) : null}
+        {event.status === "cancelled" || past ? null : (
           <div className="mt-8">
             <RsvpForm event={event} existing={existingForEvent} carpool={carpool} full={full} />
           </div>

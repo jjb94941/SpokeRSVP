@@ -59,28 +59,29 @@ To use a Turso database locally instead (same setup you will use on Vercel):
 
 Never commit `.env` or real tokens.
 
-### Demo host (local / development only)
+### Demo hosts (local / development only)
 
-Seeded by `npm run db:seed`. **Do not use these credentials on a public website. Change this password before any production deploy.**
+Seeded by `npm run db:seed`. **Do not use these credentials on a public website. Change these passwords before any production deploy.**
 
-| | |
-| --- | --- |
-| Email | `chair@millvalleyvillage.org` |
-| Password | `millvalley` |
+| | Super-administrator | Mill Valley host |
+| --- | --- | --- |
+| Email | `chair@millvalleyvillage.org` | `volunteer@millvalleyvillage.org` |
+| Password | `millvalley` | `millvalley` |
+| Can manage | Every village, and host accounts | All Mill Valley events only |
 
 Sign in at `/login`. You can also request a magic-link email; without a Resend key the link is printed on the login page and in the server log.
 
-The seed also creates three Mill Valley sample events (walkers/hike with carpools, coffee, book club with a waitlist). Rebuild them with `npm run db:reset` (works for both the local file DB and Turso).
+The seed also creates Mill Valley sample events (walkers/hike with carpools, coffee, book club with a waitlist, plus a stretch class owned by the volunteer). Rebuild them with `npm run db:reset` (works for both the local file DB and Turso).
 
 ### Useful scripts
 
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | App at http://localhost:3000 |
-| `npm run db:seed` | Create schema + demo host + sample events (file: or Turso) |
+| `npm run db:seed` | Create schema + demo hosts + sample events (file: or Turso) |
 | `npm run db:reset` | Wipe that database and seed again |
 | `npm run reminders` | Email-stub (or Resend) reminders for Going guests in the next 48 hours |
-| `npm run test:smoke` | Waitlist auto-promote + duplicate RSVP checks (uses a temp file DB) |
+| `npm run test:smoke` | Open-seat count after cancel, duplicate RSVP, host-role, and schema-migration checks (uses a temp file DB) |
 | `npm run build` | Production build |
 
 CI / offline build (no Turso network):
@@ -118,11 +119,80 @@ You can also run reminders manually: `POST` or `GET` `/api/reminders` with `Auth
 
 ## What the MVP does
 
-- **Hosts** sign in with email/password or a magic link, create events (title, date/time in Pacific Time, location name, optional private street address, capacity, description, carpools on/off), copy a share link, edit or cancel, export a CSV, see RSVPs / waitlist / carpools, and **promote** someone from the waitlist.
-- **Guests** open `/e/<token>` with **no account**. They RSVP with name plus phone **or** email: Going, not going, or waitlist when the event is full. Changing from Going to not going **auto-promotes** the next waitlisted neighbor.
+- **Hosts** sign in with email/password or a magic link. **Super-admins** can view and manage events in every Marin Villages community. At `/host/admins` they can add another super-admin (no village) or a village host (one village), and can promote or demote with a confirmation. The last super-admin cannot be removed or demoted, including by themselves. **Village hosts** are assigned to one of Tiburon, Mill Valley, Novato, San Rafael, Twin Cities, or Ross Valley, and can manage every event for that village only. Existing events stay Mill Valley when the village column is added.
+- **Guests** open `/e/<token>` with **no account**. They RSVP with name plus phone **or** email: Going, not going, or waitlist when the event is full. Changing from Going to not going opens that seat again. A host can promote the next waiting neighbor.
+- **Members** use the public events page with email only (no password). They can filter by village, sign up, and cancel with **Cancel my planned attendance at** the event name. **My events** lists every signup across villages, and the same cancel wording works there. Cancelling restores the open-seat count from before that signup.
+- **Event types and waivers** are managed by super-administrators at `/host/event-types`. Each event has one type. A type can have one waiver, and each waiver version can include up to four questions (a label, optional help text, required or optional, single line or a larger box). The first time a neighbor registers for that type, they read the waiver, answer those questions, check that they agree, and type their full name. Later registrations skip it until the waiver text or questions change and a new version is saved. People already signed up are not removed. Answers stay with that signature. They are shown to super-administrators and to the host of the village for the event the neighbor joined. They are not on public pages or in the CSV download. Village hosts can choose a type but cannot edit types or waivers.
 - **Carpools** (when enabled): offer seats or need a ride. Visible to Going guests (first names) and the host (full contact).
-- **Email**: confirmation, waitlist promotion, and reminders go through [Resend](https://resend.com) when `RESEND_API_KEY` is set. Otherwise they are **logged** (local stub). Magic links work the same way.
+- **Invitations**: on an event dashboard, paste emails or import names and emails from another event you manage (a village host only sees their village; waiver answers are never included). Each person gets one private `/invite/…` link. The link prefills their email and follows the normal registration, including a waiver or the waitlist when needed. Links stop working if the event is cancelled or its end time has passed.
+- **Past events** drop off the public list and the host upcoming list after the Pacific end time (or the start time, if there is no end). Upcoming lists are soonest first. Hosts open **Past events** to see who came and any waiver answers. My events keeps those gatherings in a collapsed section without a cancel button.
+- **Delete or cancel**: on the event dashboard, **Delete event** asks you to confirm and tells you how many people are registered or waitlisted. If anyone has responded, the event can be cancelled instead of deleted. Cancelling keeps the guest list and waiver signatures, stops invitation links, and shows as cancelled in My events. A village host can do this for their village. A super-administrator can do it for any event.
+- **Email**: the default is a local **Outbox** at `/host/outbox` plus a server log. No message is sent. See [Real email later](#real-email-later). Magic links are shown on the sign-in page in this mode. Each invitation also has **Copy link** and **Open in my email**.
 - **SMS**: not implemented (`TODO` in `src/lib/notify.ts` and `npm run reminders`).
+
+## Host roles
+
+- **Super-admin** — every event in every village. At `/host/admins` they add a person as Super-admin or as a village host, promote a host, or demote a super-admin to one village. Each change asks for confirmation. They cannot remove or demote the last super-admin, and they cannot change or remove their own account. Not tied to one village. The host header stays “Marin Villages”.
+- **Village host** — one village. They can view and manage every event for that village, including events another host in the same village created. The header shows that village, for example “Mill Valley Village”.
+
+Villages: Tiburon, Mill Valley, Novato, San Rafael, Twin Cities, Ross Valley. Existing events and village hosts default to Mill Valley (`ensureSchema` adds `events.village` and `hosts.village`, ALTER-safe on SQLite/Turso).
+
+### Local test (before any production deploy)
+
+```bash
+git fetch && git checkout cursor/village-warm-host-b975
+cp .env.example .env  # use file:./data/spoke.db for local
+npm install && npm run db:reset && npm run dev
+```
+
+Then open [http://localhost:3000](http://localhost:3000).
+
+**If you already have a local database, do not reset it.** Pull this branch, install if needed, and restart the dev server:
+
+```bash
+git pull origin cursor/village-warm-host-b975
+npm install
+npm run dev
+```
+
+Adding a super-admin uses the existing host role. There is no new column and no migration to run.
+
+**As super-administrator** — sign in as `chair@millvalleyvillage.org` / `millvalley`:
+
+1. The header says **Marin Villages**. Host home lists events from every village, including Mill Valley ones. **Manage hosts** is in the header.
+2. Open **Manage hosts**. Add a person as **Super-admin** (no village) or **Village host** (try Tiburon). Leave the password blank to generate one, or type at least 8 characters. The password is shown once. Each person is labeled Super-admin or, for example, Mill Valley host.
+3. Confirm you cannot remove or demote yourself while you are the last super-admin. Promoting or demoting someone else asks you to check a box first.
+4. Open **Event types**. Walk/Hike has the liability waiver and four questions (emergency contact name and phone required, blood type optional, allergies optional). Social and Book club do not. Archive is available. Saving changed waiver text or questions creates a new version. Signatures, including answers, stay listed under the waiver.
+
+**As a village host** — sign out, then sign in as `volunteer@millvalleyvillage.org` / `millvalley`:
+
+1. The header says **Mill Valley Village**. The list includes every Mill Valley event (walkers, coffee, book club, and the stretch class), not only events this person created.
+2. **Manage hosts** is hidden. Opening `/host/admins` returns to host home.
+3. A Tiburon event created by the super-administrator, or by the Tiburon host, does not appear. Its dashboard URL 404s.
+
+**As a member** — stay signed out of the host account and open [http://localhost:3000](http://localhost:3000):
+
+1. Enter an email and choose **Continue with email**. No password.
+2. Sign up for a walk. The first time, read the waiver, fill in the questions, check that you agree, and type your full name. A later signup for another walk skips the waiver until a super-administrator saves a new version. A coffee or book club event has no waiver.
+3. Cancel. The card offers **Sign up** again, and the open-seat count matches the number from before that signup.
+4. Open **My events**. It lists every event that email joined, in any village, and marks waitlist spots. Cancel from there as well. With no signups, the page says you are not signed up yet.
+
+Confirm the footer on public and host pages reads **Ver. 2.0 · September 15, 2026**.
+
+`npm run test:smoke` also checks role policy helpers, the `hosts.role` migration, and the version label.
+
+Do not deploy this to Vercel production until that local check is done.
+
+## Versioning
+
+Every release bumps **both** fields in `src/lib/version.ts`:
+
+| Field | Meaning |
+| --- | --- |
+| `number` | `XX.YY` — XX for major updates, YY for minor changes and bug fixes |
+| `releaseDate` | ISO date (`YYYY-MM-DD`) of the release |
+
+The footer always shows both together as `Ver. XX.YY · Month D, YYYY` (never the version number alone). See [CHANGELOG.md](CHANGELOG.md).
 
 ## Privacy / pilot disclaimer
 
@@ -130,10 +200,24 @@ This is a **village pilot**, not a production membership system.
 
 - Guest contact information is for the **event host**, not a public directory.
 - Optional street addresses on events are **host-only**.
-- Do not store medical, financial, or other sensitive records here.
+- Waiver answers such as emergency contacts or health notes are visible only to super-administrators and the host of the village whose event the neighbor registered for. They are stored with the signature in the local database and are omitted from the guest CSV. Do not treat this pilot as a medical-records system.
 - There is no Helpful Village sync. Volunteer matching stays in Helpful Village.
 - Back up the Turso database (or the local `data/spoke.db` file) if you rely on the lists.
 - **Change the demo host password before production.** Never commit API keys, Turso tokens, or `REMINDER_SECRET`. Review auth, HTTPS, backups, and a real email sending domain before neighbors depend on the site.
+
+## Real email later
+
+Leave `EMAIL_PROVIDER` unset, or set it to `outbox`. That is the pilot default.
+
+To send invitation and other messages with [Resend](https://resend.com), set these three environment variables and restart the app. No code change is required.
+
+| Variable | Value |
+| --- | --- |
+| `EMAIL_PROVIDER` | `resend` |
+| `RESEND_API_KEY` | A Resend API key. Do not commit it. |
+| `RESEND_FROM` | A sender Resend has verified, for example `Marin Villages <rsvp@your-domain.org>` |
+
+SMTP is only a hook. `EMAIL_PROVIDER=smtp` reads `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM`, then keeps the message in the Outbox until `sendViaSmtp` in `src/lib/mailer.ts` has a transport. Do not put those passwords in the repo.
 
 ## Configuration
 
@@ -143,6 +227,7 @@ Copy `.env.example` to `.env`. Nothing secret belongs in git.
 DATABASE_URL=file:./data/spoke.db
 DATABASE_AUTH_TOKEN=
 APP_URL=http://localhost:3000
+EMAIL_PROVIDER=outbox
 RESEND_API_KEY=
 RESEND_FROM=SpokeRSVP <noreply@example.com>
 REMINDER_SECRET=

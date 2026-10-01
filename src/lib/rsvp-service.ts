@@ -3,7 +3,9 @@ import { getDb } from "./db";
 import { carpools, events, rsvps, type CarpoolRole, type CarpoolRow, type EventRow, type RsvpRow } from "./db/schema";
 import { newId, newSecretToken } from "./ids";
 import { normalizeEmail, normalizePhone } from "./format";
+import { markInvitationRegistered } from "./invitations";
 import { sendEmail, sendSmsTodo, waitlistPromotedText } from "./notify";
+import { eventIsPast } from "./event-lifecycle";
 import { formatPacificRange } from "./time";
 
 export type RsvpInput = {
@@ -186,6 +188,9 @@ export async function submitRsvp(
   const name = input.guestName.trim();
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phone);
+  if (eventIsPast(event, new Date())) {
+    throw new Error("This event has already ended, so signup, the waitlist, and cancellation are closed.");
+  }
   if (name.length < 2) throw new Error("Please enter your full name.");
   if (!email && !phone) {
     throw new Error("Please include a phone number or an email so we can reach you.");
@@ -260,8 +265,8 @@ export async function submitRsvp(
     await upsertCarpool(result.id, "none", null, null);
   }
 
-  if (previousStatus === "going" && result.status !== "going") {
-    await autoPromoteWaitlist(event);
+  if ((result.status === "going" || result.status === "waitlist") && result.email) {
+    await markInvitationRegistered(event.id, result.email);
   }
 
   return { rsvp: result, previousStatus };

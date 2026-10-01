@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { appUrl, setGuestCookie } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events } from "@/lib/db/schema";
+import { eventIsPast } from "@/lib/event-lifecycle";
 import { sendEmail, rsvpConfirmationText } from "@/lib/notify";
 import { submitRsvp } from "@/lib/rsvp-service";
 import { formatPacificRange } from "@/lib/time";
@@ -17,6 +18,9 @@ export async function guestRsvp(formData: FormData) {
   if (!event) redirect("/");
   if (event.status === "cancelled") {
     redirect(`/e/${shareToken}?error=` + encodeURIComponent("This event has been cancelled."));
+  }
+  if (eventIsPast(event, new Date())) {
+    redirect(`/e/${shareToken}?error=` + encodeURIComponent("This event has already ended."));
   }
 
   const desired = String(formData.get("status") || "going") === "not_going" ? "not_going" : "going";

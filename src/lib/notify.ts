@@ -1,42 +1,27 @@
+import { deliverEmail } from "./mailer";
+
 export type NotifyPayload = {
   to: string;
   subject: string;
   text: string;
+  html?: string;
+  eventId?: string | null;
 };
 
-function logEmail(payload: NotifyPayload, extra?: string) {
-  console.log(
-    `[SpokeRSVP email${extra ? ` ${extra}` : ""}]\nTo: ${payload.to}\nSubject: ${payload.subject}\n\n${payload.text}\n`,
-  );
-}
-
-/** Email via Resend when RESEND_API_KEY is set; otherwise log-only stub. */
+/**
+ * Deliver email through the local mailer.
+ * Default is the Outbox (no network). Set EMAIL_PROVIDER=resend plus
+ * RESEND_API_KEY and RESEND_FROM to send with Resend. See src/lib/mailer.ts.
+ */
 export async function sendEmail(payload: NotifyPayload): Promise<{ stubbed: boolean }> {
-  const key = process.env.RESEND_API_KEY?.trim();
-  if (!key) {
-    logEmail(payload, "stub");
-    return { stubbed: true };
-  }
-
-  logEmail(payload, "resend");
-  const from = process.env.RESEND_FROM?.trim() || "SpokeRSVP <noreply@example.com>";
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: payload.to,
-      subject: payload.subject,
-      text: payload.text,
-    }),
+  const result = await deliverEmail({
+    to: payload.to,
+    subject: payload.subject,
+    text: payload.text,
+    html: payload.html,
+    eventId: payload.eventId,
   });
-  if (!res.ok) {
-    console.error("[SpokeRSVP] Resend error", res.status, await res.text());
-  }
-  return { stubbed: false };
+  return { stubbed: result.stubbed };
 }
 
 /**
@@ -72,7 +57,7 @@ ${opts.where}
 Change your RSVP any time:
 ${opts.manageUrl}
 
-Mill Valley Village — SpokeRSVP
+Marin Villages — SpokeRSVP
 This is a local village pilot. Contact info is only shared with the event host.`;
 }
 
@@ -92,7 +77,7 @@ ${opts.when}
 Details and carpools:
 ${opts.manageUrl}
 
-Mill Valley Village — SpokeRSVP`;
+Marin Villages — SpokeRSVP`;
 }
 
 export function reminderText(opts: {
@@ -111,13 +96,48 @@ ${opts.where}
 
 ${opts.manageUrl}
 
-Mill Valley Village — SpokeRSVP`;
+Marin Villages — SpokeRSVP`;
 }
 
 export function magicLinkText(opts: { url: string }): string {
-  return `Sign in to SpokeRSVP (Mill Valley Village host dashboard):
+  return `Sign in to SpokeRSVP (Marin Villages host dashboard):
 
 ${opts.url}
 
 This link expires in 30 minutes. If you did not ask for it, you can ignore this email.`;
+}
+
+export function superAdminWelcomeText(opts: { name: string; loginUrl: string; appointedBy: string }): string {
+  return `Hello ${opts.name},
+
+${opts.appointedBy} added you as a SpokeRSVP super-admin for Marin Villages.
+
+You can view and manage events in every village, appoint hosts, and add other super-admins. You are not tied to one village.
+
+Sign in here:
+${opts.loginUrl}
+
+Ask the person who added you for your temporary password, or use “email me a sign-in link” on that page.
+
+Marin Villages — SpokeRSVP`;
+}
+
+export function subAdminWelcomeText(opts: {
+  name: string;
+  loginUrl: string;
+  appointedBy: string;
+  villageTitle: string;
+}): string {
+  return `Hello ${opts.name},
+
+${opts.appointedBy} added you as a SpokeRSVP host for ${opts.villageTitle}.
+
+You can view and manage every event for ${opts.villageTitle}. You cannot see other villages or change anyone’s role.
+
+Sign in here:
+${opts.loginUrl}
+
+Ask the super-administrator for your temporary password, or use “email me a sign-in link” on that page.
+
+Marin Villages — SpokeRSVP`;
 }

@@ -25,7 +25,7 @@ export default async function LoginPage({
         <Flash error={params.error} ok={params.sent ? "Check your email for a sign-in link." : undefined} />
         {params.devLink ? (
           <p className="mb-6 rounded-2xl border-2 border-teal bg-teal/10 px-4 py-3 text-lg">
-            Email sending is in stub mode (no <code>RESEND_API_KEY</code>). Open this magic link:{" "}
+            Email is saved in the local Outbox, not sent. Open this magic link:{" "}
             <a href={params.devLink} className="font-semibold break-all text-teal underline">
               {params.devLink}
             </a>
@@ -33,15 +33,15 @@ export default async function LoginPage({
         ) : null}
 
         <section className="card mb-6 border-2 border-terracotta/40">
-          <h2 className="text-xl font-bold">Local / development demo host</h2>
+          <h2 className="text-xl font-bold">Local / development demo hosts</h2>
           <p className="mt-2 text-base">
-            This account is seeded for trying the app on your computer. Do not use these credentials on a
+            These accounts are seeded for trying the app on your computer. Do not use these credentials on a
             public website.
           </p>
           <p className="mt-3 text-lg">
-            Email: <strong>chair@millvalleyvillage.org</strong>
+            Super-administrator: <strong>chair@millvalleyvillage.org</strong> / <strong>millvalley</strong>
             <br />
-            Password: <strong>millvalley</strong>
+            Mill Valley host: <strong>volunteer@millvalleyvillage.org</strong> / <strong>millvalley</strong>
           </p>
         </section>
 

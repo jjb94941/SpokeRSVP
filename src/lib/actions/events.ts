@@ -1,14 +1,18 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { appUrl, requireHost } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { events } from "@/lib/db/schema";
+import { resolveEventTypeId } from "@/lib/event-catalog";
 import { newId, newShareToken } from "@/lib/ids";
+import { findManagedEvent, isAdmin } from "@/lib/roles";
+import { isVillage } from "@/lib/villages";
 import { pacificWallToUtc } from "@/lib/time";
-import { promoteRsvp } from "@/lib/rsvp-service";
+import { eventIsPast, permanentlyDeleteEvent } from "@/lib/event-lifecycle";
+import { getEventCounts, promoteRsvp } from "@/lib/rsvp-service";
 
 const eventSchema = z.object({
   title: z.string().trim().min(3, "Please enter a title."),
@@ -62,6 +66,22 @@ export async function createEvent(formData: FormData) {
   } catch (error) {
     redirect("/host/events/new?error=" + encodeURIComponent((error as Error).message));
   }
+  const requestedVillage = String(formData.get("village") || "").trim();
+  const village = isAdmin(host) ? requestedVillage : host.village;
+  if (!isVillage(village)) {
+    redirect(
+      "/host/events/new?error=" +
+        encodeURIComponent(
+          isAdmin(host) ? "Choose which village this event is for." : "Your account is not assigned to a village.",
+        ),
+    );
+  }
+  let eventTypeId: string;
+  try {
+    eventTypeId = await resolveEventTypeId(String(formData.get("eventTypeId") || ""));
+  } catch (error) {
+    redirect("/host/events/new?error=" + encodeURIComponent((error as Error).message));
+  }
   const now = new Date();
   const id = newId();
   const db = await getDb();
@@ -70,6 +90,8 @@ export async function createEvent(formData: FormData) {
     .values({
       id,
       hostId: host.id,
+      eventTypeId,
+      village,
       shareToken: newShareToken(),
       status: "published",
       createdAt: now,
@@ -77,47 +99,54 @@ export async function createEvent(formData: FormData) {
       ...values,
     })
     .run();
-  redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event created. Copy the RSVP link to share it."));
+  redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event created. Next: invite people.") + "#invitations");
 }
 
 export async function updateEvent(formData: FormData) {
-  const host = await requireHost();
   const id = String(formData.get("id") || "");
-  const db = await getDb();
-  const existing = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.id, id), eq(events.hostId, host.id)))
-    .get();
-  if (!existing) redirect("/host");
+  const managed = await findManagedEvent(id);
+  if (!managed) redirect("/host");
   let values;
   try {
     values = readEventForm(formData);
   } catch (error) {
     redirect(`/host/events/${id}/edit?error=` + encodeURIComponent((error as Error).message));
   }
+  let village = managed.event.village;
+  if (isAdmin(managed.host)) {
+    const requested = String(formData.get("village") || "").trim();
+    if (!isVillage(requested)) {
+      redirect(`/host/events/${id}/edit?error=` + encodeURIComponent("Choose which village this event is for."));
+    }
+    village = requested;
+  }
+  let eventTypeId = managed.event.eventTypeId;
+  try {
+    eventTypeId = await resolveEventTypeId(String(formData.get("eventTypeId") || ""), managed.event.eventTypeId);
+  } catch (error) {
+    redirect(`/host/events/${id}/edit?error=` + encodeURIComponent((error as Error).message));
+  }
+  const db = await getDb();
   await db
     .update(events)
-    .set({ ...values, updatedAt: new Date() })
+    .set({ ...values, village, eventTypeId, updatedAt: new Date() })
     .where(eq(events.id, id))
     .run();
-  redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event updated."));
+  redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event updated. Next: invite people.") + "#invitations");
 }
 
 export async function cancelEvent(formData: FormData) {
-  const host = await requireHost();
   const id = String(formData.get("id") || "");
   const confirm = String(formData.get("confirm") || "");
   if (confirm !== "yes") {
     redirect(`/host/events/${id}?error=` + encodeURIComponent("Check the box to confirm cancellation."));
   }
+  const managed = await findManagedEvent(id);
+  if (!managed) redirect("/host");
+  if (eventIsPast(managed.event, new Date())) {
+    redirect(`/host/events/${id}?error=` + encodeURIComponent("This event has already ended. It stays in Past events."));
+  }
   const db = await getDb();
-  const existing = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.id, id), eq(events.hostId, host.id)))
-    .get();
-  if (!existing) redirect("/host");
   await db
     .update(events)
     .set({ status: "cancelled", updatedAt: new Date() })
@@ -127,28 +156,51 @@ export async function cancelEvent(formData: FormData) {
 }
 
 export async function restoreEvent(formData: FormData) {
-  const host = await requireHost();
   const id = String(formData.get("id") || "");
+  const managed = await findManagedEvent(id);
+  if (!managed) redirect("/host");
   const db = await getDb();
   await db
     .update(events)
     .set({ status: "published", updatedAt: new Date() })
-    .where(and(eq(events.id, id), eq(events.hostId, host.id)))
+    .where(eq(events.id, id))
     .run();
   redirect(`/host/events/${id}?ok=` + encodeURIComponent("Event is open again."));
 }
 
+export async function deleteEvent(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  const confirm = String(formData.get("confirm") || "");
+  if (confirm !== "yes") {
+    redirect(`/host/events/${id}?confirm=delete&error=` + encodeURIComponent("Check the box to confirm you want to delete this event."));
+  }
+  const managed = await findManagedEvent(id);
+  if (!managed) redirect("/host");
+  const counts = await getEventCounts(managed.event);
+  if (counts.going + counts.waitlist + counts.notGoing > 0) {
+    redirect(
+      `/host/events/${id}?confirm=delete&error=` +
+        encodeURIComponent(
+          `${counts.going} registered and ${counts.waitlist} waitlisted. Cancel the event instead of deleting it.`,
+        ),
+    );
+  }
+  try {
+    await permanentlyDeleteEvent(id);
+  } catch (error) {
+    redirect(`/host/events/${id}?confirm=delete&error=` + encodeURIComponent((error as Error).message));
+  }
+  redirect("/host?ok=" + encodeURIComponent(`${managed.event.title} was deleted.`));
+}
+
 export async function hostPromote(formData: FormData) {
-  const host = await requireHost();
   const eventId = String(formData.get("eventId") || "");
   const rsvpId = String(formData.get("rsvpId") || "");
-  const db = await getDb();
-  const event = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.id, eventId), eq(events.hostId, host.id)))
-    .get();
-  if (!event) redirect("/host");
+  const managed = await findManagedEvent(eventId);
+  if (!managed) redirect("/host");
+  if (eventIsPast(managed.event, new Date())) {
+    redirect(`/host/events/${eventId}?error=` + encodeURIComponent("This event has already ended, so the waitlist is closed."));
+  }
   try {
     await promoteRsvp(rsvpId, await appUrl());
   } catch (error) {

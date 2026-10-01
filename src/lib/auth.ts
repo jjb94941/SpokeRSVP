@@ -9,8 +9,11 @@ import { normalizeEmail } from "./format";
 
 export const SESSION_COOKIE = "spoke_session";
 export const GUEST_COOKIE_PREFIX = "spoke_guest_";
+export const NEW_HOST_PASSWORD_COOKIE = "spoke_new_host_pw";
+export const MEMBER_EMAIL_COOKIE = "spoke_member_email";
 const SESSION_DAYS = 30;
 const MAGIC_MINUTES = 30;
+const NEW_HOST_PASSWORD_SECONDS = 120;
 
 export async function getCurrentHost(): Promise<Host | null> {
   const jar = await cookies();
@@ -95,6 +98,31 @@ export async function consumeMagicLink(token: string): Promise<string | null> {
   return row.email;
 }
 
+const MEMBER_EMAIL_SECONDS = 60 * 60 * 24 * 180;
+
+export async function getMemberEmail(): Promise<string | null> {
+  const jar = await cookies();
+  return normalizeEmail(jar.get(MEMBER_EMAIL_COOKIE)?.value);
+}
+
+export async function setMemberEmail(email: string) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return;
+  const jar = await cookies();
+  jar.set(MEMBER_EMAIL_COOKIE, normalized, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: MEMBER_EMAIL_SECONDS,
+  });
+}
+
+export async function clearMemberEmail() {
+  const jar = await cookies();
+  jar.set(MEMBER_EMAIL_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+}
+
 export async function setGuestCookie(eventId: string, manageToken: string) {
   const jar = await cookies();
   jar.set(`${GUEST_COOKIE_PREFIX}${eventId}`, manageToken, {
@@ -109,6 +137,22 @@ export async function setGuestCookie(eventId: string, manageToken: string) {
 export async function getGuestManageToken(eventId: string): Promise<string | undefined> {
   const jar = await cookies();
   return jar.get(`${GUEST_COOKIE_PREFIX}${eventId}`)?.value;
+}
+
+export async function setNewHostPasswordFlash(password: string) {
+  const jar = await cookies();
+  jar.set(NEW_HOST_PASSWORD_COOKIE, password, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/host/admins",
+    maxAge: NEW_HOST_PASSWORD_SECONDS,
+  });
+}
+
+export async function readNewHostPasswordFlash(): Promise<string | null> {
+  const jar = await cookies();
+  return jar.get(NEW_HOST_PASSWORD_COOKIE)?.value || null;
 }
 
 export async function appUrl(): Promise<string> {

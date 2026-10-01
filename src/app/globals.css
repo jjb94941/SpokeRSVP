@@ -1,24 +1,32 @@
 @import "tailwindcss";
 
+/* Village Warm tokens — Mill Valley Village host + shared chrome.
+   Source: Village Warm token sheet (terracotta, cream, sand, teal). */
 @theme inline {
   --color-terracotta: #c46b4a;
-  --color-terracotta-dark: #a3553a;
+  --color-terracotta-pressed: #a85538;
+  --color-terracotta-dark: #a85538;
   --color-cream: #fbf6f0;
   --color-teal: #4a7c74;
   --color-teal-dark: #3a635c;
   --color-ink: #3d2f28;
-  --color-sand: #f3e8d9;
-  --color-sand-deep: #e6d3be;
+  --color-muted: #5c4a40;
+  --color-sand: #ede4d8;
+  --color-card: #f5ede3;
+  --color-card-border: #e0d2c0;
+  --color-sand-deep: #e0d2c0;
+  --color-badge: #e8d5c8;
+  --color-badge-ink: #8b4a32;
   --font-sans: var(--font-atkinson), "Atkinson Hyperlegible", "Segoe UI", sans-serif;
   --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
 }
 
 html,
 body {
-  background: #fbf6f0;
-  color: #3d2f28;
-  font-size: 18px;
-  line-height: 1.6;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-size: 17px;
+  line-height: 1.5;
 }
 
 body {
@@ -32,10 +40,11 @@ h3,
 .font-display {
   font-family: var(--font-display);
   letter-spacing: -0.02em;
+  color: var(--color-ink);
 }
 
 :focus-visible {
-  outline: 3px solid #4a7c74;
+  outline: 3px solid var(--color-teal);
   outline-offset: 3px;
 }
 
@@ -44,17 +53,19 @@ h3,
   min-height: 56px;
   align-items: center;
   justify-content: center;
-  border-radius: 0.75rem;
-  background: #c46b4a;
+  border-radius: 14px;
+  border: 2px solid var(--color-terracotta-pressed);
+  background: var(--color-terracotta);
   padding: 0 1.5rem;
-  font-size: 1.125rem;
+  font-size: 20px;
   font-weight: 700;
-  color: #fbf6f0;
+  line-height: 1.2;
+  color: #fff;
   box-shadow: 0 1px 2px rgb(61 47 40 / 0.12);
 }
 
 .btn-primary:hover {
-  background: #a3553a;
+  background: var(--color-terracotta-pressed);
 }
 
 .btn-teal {
@@ -62,24 +73,115 @@ h3,
   min-height: 56px;
   align-items: center;
   justify-content: center;
-  border-radius: 0.75rem;
-  background: #4a7c74;
+  border-radius: 14px;
+  border: 2px solid var(--color-teal-dark);
+  background: var(--color-teal);
   padding: 0 1.5rem;
-  font-size: 1.125rem;
+  font-size: 18px;
   font-weight: 700;
-  color: #fbf6f0;
+  line-height: 1.2;
+  color: #fff;
 }
 
 .btn-teal:hover {
-  background: #3a635c;
+  background: var(--color-teal-dark);
+}
+
+/* Secondary action: teal outline on white so it does not compete with terracotta. */
+.btn-secondary {
+  display: inline-flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 2px solid var(--color-teal);
+  background: #fff;
+  padding: 0 1.5rem;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-teal);
+  text-align: center;
+}
+
+.btn-secondary:hover {
+  background: var(--color-card);
+}
+
+.btn-danger {
+  display: inline-flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 2px solid var(--color-terracotta-pressed);
+  background: #fff;
+  padding: 0 1.5rem;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-terracotta-pressed);
+  text-align: center;
+}
+
+.btn-danger:hover {
+  background: rgb(196 107 74 / 0.12);
+}
+
+.chip {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 2px solid var(--color-teal);
+  background: transparent;
+  padding: 8px 18px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-ink);
+}
+
+.chip:hover {
+  background: var(--color-card);
+}
+
+.chip-active {
+  background: var(--color-teal);
+  color: #fff;
+}
+
+.chip-active:hover {
+  background: var(--color-teal-dark);
 }
 
 .card {
-  border-radius: 1.25rem;
-  background: #f7efe4;
-  padding: 1.5rem;
-  box-shadow: 0 1px 2px rgb(61 47 40 / 0.06);
-  border: 1px solid #e6d3be;
+  border-radius: 14px;
+  background: var(--color-card);
+  padding: 18px;
+  box-shadow: 0 2px 6px rgb(61 47 40 / 0.05);
+  border: 1px solid var(--color-card-border);
+}
+
+.status-line {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--color-teal);
+}
+
+.meta-line {
+  font-size: 17px;
+  line-height: 1.45;
+  color: var(--color-muted);
+}
+
+.inset-row {
+  border-radius: 12px;
+  border: 1px solid var(--color-card-border);
+  background: var(--color-cream);
+  padding: 12px 14px;
 }
 
 a {

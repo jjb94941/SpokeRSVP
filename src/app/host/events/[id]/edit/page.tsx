@@ -1,12 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, eq } from "drizzle-orm";
 import { EventForm } from "@/components/EventForm";
 import { Flash } from "@/components/Ui";
 import { updateEvent } from "@/lib/actions/events";
-import { requireHost } from "@/lib/auth";
-import { getDb } from "@/lib/db";
-import { events } from "@/lib/db/schema";
+import { listEventTypeChoices } from "@/lib/event-catalog";
+import { findManagedEvent, isAdmin } from "@/lib/roles";
 
 export default async function EditEventPage({
   params,
@@ -15,27 +13,35 @@ export default async function EditEventPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
-  const host = await requireHost();
   const { id } = await params;
   const q = await searchParams;
-  const db = await getDb();
-  const event = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.id, id), eq(events.hostId, host.id)))
-    .get();
-  if (!event) notFound();
+  const managed = await findManagedEvent(id);
+  if (!managed) notFound();
+  const { host, event } = managed;
+  const eventTypes = await listEventTypeChoices(event.eventTypeId);
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
       <p className="mb-4">
-        <Link href={`/host/events/${event.id}`} className="text-lg font-semibold text-teal underline">
+        <Link href={`/host/events/${event.id}`} className="text-[17px] font-bold text-teal underline">
           Back to {event.title}
         </Link>
       </p>
-      <h1 className="font-display mb-6 text-4xl">Edit event</h1>
+      <h1 className="font-display mb-4 text-[32px] leading-tight font-bold">Edit event</h1>
+      <p className="mb-6">
+        <Link href={`/host/events/${event.id}#invitations`} className="text-[17px] font-bold text-teal underline">
+          Next: invite people
+        </Link>
+      </p>
       <Flash error={q.error} />
-      <EventForm event={event} action={updateEvent} submitLabel="Save changes" />
+      <EventForm
+        event={event}
+        action={updateEvent}
+        submitLabel="Save changes"
+        chooseVillage={isAdmin(host)}
+        defaultVillage={event.village}
+        eventTypes={eventTypes}
+      />
     </main>
   );
 }
